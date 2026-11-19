@@ -3,21 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BLOX ZOMBIE ARENA 3D - Multiplayer & Edu-Reload</title>
+    <title>Blox Zombie Arena 3D</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700;800&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
         body, html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
             overflow: hidden;
+            touch-action: none;
             background-color: #0b0f19;
             font-family: 'Inter', sans-serif;
+        }
+        input, button {
+            touch-action: manipulation;
+        }
+        #lobby-screen, #mvp-modal, #quiz-modal {
+            touch-action: pan-y;
         }
         h1, h2, h3, .roblox-font {
             font-family: 'Fredoka', sans-serif;
@@ -77,7 +86,30 @@
         .urgent-pulse {
             animation: urgentBlink 0.75s infinite;
         }
-        /* Custom scrollbar for waiting room */
+        #mobile-joystick-base {
+            position: relative;
+            width: 118px;
+            height: 118px;
+            border-radius: 9999px;
+            background: rgba(15, 23, 42, 0.65);
+            border: 2.5px solid rgba(255, 255, 255, 0.28);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(6px);
+        }
+        #mobile-joystick-knob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 48px;
+            height: 48px;
+            margin-top: -24px;
+            margin-left: -24px;
+            border-radius: 9999px;
+            background: radial-gradient(circle at 30% 30%, #fde047, #f59e0b);
+            border: 2px solid #ffffff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+            pointer-events: none;
+        }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); border-radius: 99px; }
         ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.7); border-radius: 99px; }
@@ -308,8 +340,13 @@
             </div>
 
             <!-- Right: Kills, Deaths & Score -->
-            <div class="bg-slate-950/85 border-2 border-slate-700/90 rounded-2xl p-3 text-right backdrop-blur-md">
-                <div class="text-[10px] font-bold text-slate-400 uppercase">SKOR</div>
+            <div class="bg-slate-950/85 border-2 border-slate-700/90 rounded-2xl p-2.5 sm:p-3 text-right backdrop-blur-md">
+                <div class="flex items-center justify-end gap-1.5">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase">SKOR</span>
+                    <button id="btn-mobile-exit" class="pointer-events-auto sm:hidden bg-rose-600/90 active:bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-md">
+                        ✕
+                    </button>
+                </div>
                 <div id="hud-score" class="text-xl sm:text-2xl font-black text-yellow-300">0</div>
                 <div class="text-[11px] font-bold text-slate-300 mt-0.5">
                     <span class="text-emerald-400">🔫 <span id="hud-kills">0</span></span>
@@ -340,25 +377,51 @@
         </div>
 
         <!-- Bottom Bar: Weapon, Ammo (50/50) & Manual Quiz Trigger -->
-        <div class="flex items-end justify-between gap-2">
-            <!-- Mobile Touch Controls -->
-            <div id="mobile-controls" class="pointer-events-auto flex sm:hidden gap-2">
-                <button id="mob-left" class="w-11 h-11 rounded-2xl bg-slate-900/80 border border-slate-600 text-white font-bold active:bg-slate-700">◀</button>
-                <button id="mob-up" class="w-11 h-11 rounded-2xl bg-slate-900/80 border border-slate-600 text-white font-bold active:bg-slate-700">▲</button>
-                <button id="mob-right" class="w-11 h-11 rounded-2xl bg-slate-900/80 border border-slate-600 text-white font-bold active:bg-slate-700">▶</button>
-                <button id="mob-crouch" class="w-11 h-11 rounded-2xl bg-sky-600/85 border border-sky-300 text-white text-xs font-black">NUNDUK</button>
-                <button id="mob-jump" class="w-11 h-11 rounded-2xl bg-amber-500/85 text-slate-950 text-xs font-black">LOMPAT</button>
+        <div class="flex items-end justify-between gap-2 w-full">
+            <!-- Mobile Virtual Joystick & Action Controls (Touch Devices / Small Screens) -->
+            <div id="mobile-controls" class="pointer-events-auto flex md:hidden items-end justify-between w-full gap-2 pb-1">
+                <!-- Left: 360° Virtual Analog Stick (Move + Auto-Sprint at outer edge) -->
+                <div class="flex flex-col items-center gap-1">
+                    <div id="mobile-joystick-base">
+                        <div id="mobile-joystick-knob"></div>
+                    </div>
+                    <span class="text-[9px] font-extrabold text-slate-300 bg-slate-950/75 px-2 py-0.5 rounded-full">GESER JALAN / LARI</span>
+                </div>
+
+                <!-- Right: Touch Action Cluster (Shoot, Jump, Crouch, Reload Quiz) -->
+                <div class="flex flex-col items-end gap-2">
+                    <!-- Top mini-row: Ammo Counter + Reload Quiz + Crouch -->
+                    <div class="flex items-center gap-2">
+                        <button id="mob-reload" class="h-11 px-3 rounded-2xl bg-amber-500/95 active:bg-amber-400 border-2 border-amber-200 text-slate-950 text-xs font-black shadow-lg">
+                            🧠 <span id="mob-ammo-label">50/50</span>
+                        </button>
+                        <button id="mob-crouch" class="h-11 px-3 rounded-2xl bg-sky-600/90 active:bg-sky-500 border-2 border-sky-300 text-white text-xs font-black shadow-lg">
+                            🦆 NUNDUK
+                        </button>
+                    </div>
+                    <!-- Main bottom row: Jump + Big Fire Button -->
+                    <div class="flex items-center gap-2.5">
+                        <button id="mob-jump" class="w-14 h-14 rounded-full bg-emerald-500/90 active:bg-emerald-400 border-2 border-emerald-200 text-slate-950 text-xs font-black shadow-xl">
+                            ⬆ LOMPAT
+                        </button>
+                        <button id="mob-fire" class="w-20 h-20 rounded-full bg-gradient-to-br from-rose-500 to-red-600 active:scale-95 border-4 border-rose-200 text-white text-sm font-black shadow-2xl flex flex-col items-center justify-center leading-tight">
+                            <span class="text-xl">🎯</span>
+                            <span>TEMBAK</span>
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            <div class="hidden sm:flex items-center gap-2 bg-slate-950/75 border border-slate-700 px-3 py-1.5 rounded-xl text-[11px] text-slate-300">
+            <!-- Desktop Controls Hint & Ammo Box -->
+            <div class="hidden md:flex items-center gap-2 bg-slate-950/75 border border-slate-700 px-3 py-1.5 rounded-xl text-[11px] text-slate-300">
                 <span>Klik layar untuk kunci kamera • <b class="text-sky-300">[C / Ctrl]</b> Nunduk • <b class="text-amber-300">[1] / [R]</b> Kuis Reload</span>
                 <button id="btn-exit-lobby" class="pointer-events-auto ml-2 bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1 rounded-lg font-bold cursor-pointer">
                     Keluar
                 </button>
             </div>
 
-            <!-- Ammo Box (50 / 50) -->
-            <div class="bg-slate-950/90 border-2 border-slate-700 rounded-2xl px-4 py-2.5 text-right backdrop-blur-md ml-auto pointer-events-auto">
+            <!-- Desktop Ammo Box (50 / 50) -->
+            <div class="hidden md:block bg-slate-950/90 border-2 border-slate-700 rounded-2xl px-4 py-2.5 text-right backdrop-blur-md ml-auto pointer-events-auto">
                 <div class="text-[10px] font-bold text-slate-400 uppercase">BLOX BLASTER • EDU RELOAD</div>
                 <div class="flex items-baseline justify-end gap-1.5">
                     <span id="hud-ammo" class="text-2xl sm:text-3xl font-black text-emerald-400">50</span>
@@ -856,19 +919,58 @@
                 ground.receiveShadow = true;
                 arenaGroup.add(ground);
 
-                // Stepped Central Pyramid
+                // Stepped Central Pyramid + Golden Capstone
                 addSolidBox(0, 0, 0, 26, 3.2, 26, 0xc8843b);
                 addSolidBox(0, 3.2, 0, 18, 3.2, 18, 0xd49246);
                 addSolidBox(0, 6.4, 0, 10, 3.2, 10, 0xe0a054);
+                addSolidBox(0, 9.6, 0, 4.4, 1.4, 4.4, 0xfbbf24, 0xf59e0b, 0.25);
+
+                // Twin Desert Gate Pillars & Lintels (North & South Approaches)
+                [-7.5, 7.5].forEach(gx => {
+                    addSolidBox(gx, 0, -18, 2.4, 6.5, 2.4, 0xb87632);
+                    addSolidBox(gx, 0, 18, 2.4, 6.5, 2.4, 0xb87632);
+                });
+                addSolidBox(0, 6.5, -18, 17.4, 1.4, 2.6, 0xd99b52);
+                addSolidBox(0, 6.5, 18, 17.4, 1.4, 2.6, 0xd99b52);
+
+                // Oasis Pond & Palm Trees (South-West & North-East Accents)
+                const pondMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.25, metalness: 0.2 });
+                const pond1 = new THREE.Mesh(new THREE.BoxGeometry(16, 0.25, 12), pondMat);
+                pond1.position.set(-34, 0.12, 34);
+                pond1.receiveShadow = true;
+                arenaGroup.add(pond1);
+
+                const palmCoords = [[-25, 31], [-43, 37], [22, -33], [41, -18], [-16, 44]];
+                const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
+                const frondMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.7 });
+                palmCoords.forEach(([px, pz], idx) => {
+                    const h = 5.5 + (idx % 3) * 1.4;
+                    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.65, h, 7), trunkMat);
+                    trunk.position.set(px, h * 0.5, pz);
+                    trunk.castShadow = true;
+                    arenaGroup.add(trunk);
+
+                    for (let f = 0; f < 4; f++) {
+                        const frond = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.22, 0.85), frondMat);
+                        frond.position.set(px, h + 0.1, pz);
+                        frond.rotation.y = (f * Math.PI) / 2 + idx * 0.4;
+                        frond.rotation.z = 0.28;
+                        frond.castShadow = true;
+                        arenaGroup.add(frond);
+                    }
+                });
 
                 // Elevated Skybridge & Watchtower East
                 addSolidBox(26, 0, -24, 12, 7.5, 12, 0xb87632);
+                addSolidBox(26, 7.5, -24, 13.4, 1.0, 13.4, 0x92400e);
                 addSolidBox(13, 6.2, -12, 16, 1.3, 4.5, 0x9c622b);
 
                 // West Oasis Pillars & Low Crouch Cover
                 const westCoords = [[-30, -18], [-38, 0], [-28, 22], [-44, 14]];
                 westCoords.forEach(([wx, wz], idx) => {
-                    addSolidBox(wx, 0, wz, 7, 4 + (idx % 2) * 3.5, 7, 0xc07c38);
+                    const h = 4 + (idx % 2) * 3.5;
+                    addSolidBox(wx, 0, wz, 7, h, 7, 0xc07c38);
+                    addSolidBox(wx, h, wz, 7.8, 0.7, 7.8, 0xd99b52);
                 });
                 // Low crawl/crouch tunnel cover near south-west
                 addSolidBox(-20, 0, 32, 9, 2.1, 4.2, 0x8d5828);
@@ -881,6 +983,7 @@
                 ];
                 desertBlocks.forEach(([x, z, sx, sy, sz], i) => {
                     addSolidBox(x, 0, z, sx, sy, sz, i % 2 === 0 ? 0xb87632 : 0xa5692c);
+                    addSolidBox(x, sy, z, sx * 0.75, 0.45, sz * 0.75, 0xd99b52);
                 });
             } else if (arenaType === 'city') {
                 currentGravity = -34;
@@ -895,44 +998,94 @@
                 // Asphalt Ground
                 const ground = new THREE.Mesh(
                     new THREE.PlaneGeometry(span, span),
-                    new THREE.MeshStandardMaterial({ color: 0x262f40, roughness: 0.85 })
+                    new THREE.MeshStandardMaterial({ color: 0x1e2636, roughness: 0.85 })
                 );
                 ground.rotation.x = -Math.PI / 2;
                 ground.receiveShadow = true;
                 arenaGroup.add(ground);
 
-                // Central Plaza Roundabout & Tower
-                addSolidBox(0, 0, 0, 14, 2.4, 14, 0x475569);
-                addSolidBox(0, 2.4, 0, 7, 9.0, 7, 0x64748b, 0xff4500, 0.18);
+                // City Road Markings & Intersection Lines (Visual Ground Detail)
+                const roadLineMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+                const whiteLineMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
+                for (let pos = -62; pos <= 62; pos += 12) {
+                    if (Math.abs(pos) < 12) continue;
+                    const dashNS = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 5.2), roadLineMat);
+                    dashNS.rotation.x = -Math.PI / 2;
+                    dashNS.position.set(0, 0.03, pos);
+                    arenaGroup.add(dashNS);
 
-                // Skyscrapers & Glowing Windows around the City Grid
-                const buildings = [
-                    [-32, -30, 16, 22, 16, 0x334155],
-                    [32, -30, 18, 26, 16, 0x2c374b],
-                    [-34, 30, 16, 18, 18, 0x3b485e],
-                    [34, 30, 16, 20, 16, 0x2e3a4e],
-                    [0, -48, 22, 14, 12, 0x334155],
-                    [-54, 0, 14, 16, 16, 0x2b3648],
-                    [54, 4, 14, 15, 16, 0x344257],
-                    [0, 52, 20, 12, 12, 0x2c374b]
-                ];
-                buildings.forEach(([x, z, sx, sy, sz, col], idx) => {
-                    addSolidBox(x, 0, z, sx, sy, sz, col);
-                    // Glowing window accent strip
-                    addSolidBox(x, sy * 0.65, z, sx + 0.25, 1.3, sz + 0.25, 0xff7b39, idx % 2 === 0 ? 0xff5500 : 0xffaa22, 0.55, false, false);
+                    const dashEW = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 0.45), roadLineMat);
+                    dashEW.rotation.x = -Math.PI / 2;
+                    dashEW.position.set(pos, 0.03, 0);
+                    arenaGroup.add(dashEW);
+                }
+
+                // Crosswalk stripes near central plaza
+                [-14, 14].forEach(cPos => {
+                    for (let s = -6; s <= 6; s += 2.4) {
+                        const cwN = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.6), whiteLineMat);
+                        cwN.rotation.x = -Math.PI / 2;
+                        cwN.position.set(s, 0.03, cPos);
+                        arenaGroup.add(cwN);
+                    }
                 });
 
-                // Overpass / Low Barricades & Buses (jumpable & crouch-able)
+                // Central Plaza Roundabout, Fountain & Clock/Beacon Tower
+                addSolidBox(0, 0, 0, 16, 1.4, 16, 0x475569);
+                addSolidBox(0, 1.4, 0, 10, 1.2, 10, 0x0284c7, 0x38bdf8, 0.25);
+                addSolidBox(0, 2.6, 0, 6.2, 9.5, 6.2, 0x64748b, 0xff5a2c, 0.22);
+                addSolidBox(0, 12.1, 0, 7.6, 1.4, 7.6, 0xf59e0b, 0xff7b29, 0.4);
+                addSolidBox(0, 13.5, 0, 1.4, 3.4, 1.4, 0xfef08a, 0xfacc15, 0.75);
+
+                // Skyscrapers with Roof Crowns, Antennas & Multi-Row Glowing Windows
+                const buildings = [
+                    [-32, -30, 16, 22, 16, 0x334155, 0xff7b39],
+                    [32, -30, 18, 26, 16, 0x2c374b, 0x38bdf8],
+                    [-34, 30, 16, 18, 18, 0x3b485e, 0xfbbf24],
+                    [34, 30, 16, 20, 16, 0x2e3a4e, 0xf472b6],
+                    [0, -48, 22, 15, 12, 0x334155, 0xff6b35],
+                    [-54, 0, 14, 17, 16, 0x2b3648, 0x60a5fa],
+                    [54, 4, 14, 16, 16, 0x344257, 0xff8c42],
+                    [0, 52, 20, 13, 12, 0x2c374b, 0x34d399]
+                ];
+                buildings.forEach(([x, z, sx, sy, sz, col, winCol], bIdx) => {
+                    addSolidBox(x, 0, z, sx, sy, sz, col);
+                    // Roof ledge / crown + rooftop spire
+                    addSolidBox(x, sy, z, sx + 1.2, 1.1, sz + 1.2, 0x1e293b);
+                    if (bIdx % 2 === 0) {
+                        addSolidBox(x, sy + 1.1, z, 0.7, 4.2, 0.7, 0x94a3b8, winCol, 0.35, false, false);
+                    }
+                    // Three horizontal window bands for richer city skyline
+                    addSolidBox(x, sy * 0.25, z, sx + 0.26, 1.05, sz + 0.26, winCol, winCol, 0.45, false, false);
+                    addSolidBox(x, sy * 0.52, z, sx + 0.26, 1.05, sz + 0.26, winCol, winCol, 0.6, false, false);
+                    addSolidBox(x, sy * 0.78, z, sx + 0.26, 1.05, sz + 0.26, winCol, winCol, 0.72, false, false);
+                });
+
+                // Street Lamps & Traffic Signals along Main Boulevards
+                const lampCoords = [
+                    [-11, -24], [11, -24], [-11, 24], [11, 24],
+                    [-24, -11], [24, -11], [-24, 11], [24, 11]
+                ];
+                lampCoords.forEach(([lx, lz], idx) => {
+                    addSolidBox(lx, 0, lz, 0.65, 5.2, 0.65, 0x334155, 0x000000, 0, true, false);
+                    const bulbCol = idx % 2 === 0 ? 0xfef08a : 0x38bdf8;
+                    addSolidBox(lx, 5.2, lz, 1.35, 0.85, 1.35, bulbCol, bulbCol, 0.85, false, false);
+                });
+
+                // City Buses, Taxis & Low Crouch Barricades (Solid & Climbable)
                 const streetProps = [
-                    [-16, -12, 5.5, 3.0, 11, 0xd97706],
-                    [17, 14, 5.5, 3.0, 11, 0x2563eb],
-                    [18, -16, 8.0, 2.1, 4.0, 0x475569],
-                    [-18, 16, 8.0, 2.1, 4.0, 0x475569],
-                    [-44, -14, 6.0, 3.5, 6.0, 0x4b5563],
-                    [44, 16, 6.0, 3.5, 6.0, 0x4b5563]
+                    [-16, -12, 5.6, 3.2, 11.5, 0xd97706],
+                    [17, 14, 5.6, 3.2, 11.5, 0x2563eb],
+                    [18, -16, 8.2, 2.0, 4.0, 0xfacc15],
+                    [-18, 16, 8.2, 2.0, 4.0, 0x475569],
+                    [-44, -14, 6.5, 3.8, 6.5, 0x4b5563],
+                    [44, 16, 6.5, 3.8, 6.5, 0x4b5563],
+                    [-24, 46, 7.5, 2.1, 4.2, 0x334155],
+                    [24, -44, 7.5, 2.1, 4.2, 0x334155]
                 ];
                 streetProps.forEach(([x, z, sx, sy, sz, col]) => {
                     addSolidBox(x, 0, z, sx, sy, sz, col);
+                    addSolidBox(x, sy * 0.68, z, sx + 0.18, sy * 0.24, sz * 0.82, 0xbae6fd, 0x38bdf8, 0.25, false, false);
                 });
             } else if (arenaType === 'moon') {
                 currentGravity = -17.5; // Low gravity moon jump!
@@ -953,13 +1106,43 @@
                 ground.receiveShadow = true;
                 arenaGroup.add(ground);
 
+                // Distant Earth & Starfield in Lunar Sky
+                const starPts = [];
+                for (let s = 0; s < 320; s++) {
+                    const ang = Math.random() * Math.PI * 2;
+                    const rad = 115 + Math.random() * 50;
+                    starPts.push(Math.cos(ang) * rad, 18 + Math.random() * 75, Math.sin(ang) * rad);
+                }
+                const starGeom = new THREE.BufferGeometry();
+                starGeom.setAttribute('position', new THREE.Float32BufferAttribute(starPts, 3));
+                const stars = new THREE.Points(starGeom, new THREE.PointsMaterial({ color: 0xffffff, size: 1.3 }));
+                arenaGroup.add(stars);
+
+                const earthMesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(14, 24, 24),
+                    new THREE.MeshStandardMaterial({ color: 0x2563eb, emissive: 0x1d4ed8, emissiveIntensity: 0.35, roughness: 0.6 })
+                );
+                earthMesh.position.set(-72, 58, -110);
+                arenaGroup.add(earthMesh);
+
+                // Lunar Crater Rims (Visual Ground Accents)
+                const craterMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.92 });
+                [[-22, 18, 7.5], [25, -16, 8.5], [-42, -45, 10], [44, 42, 9.5]].forEach(([cx, cz, cr]) => {
+                    const rim = new THREE.Mesh(new THREE.TorusGeometry(cr, 1.05, 8, 22), craterMat);
+                    rim.rotation.x = Math.PI / 2;
+                    rim.position.set(cx, 0.35, cz);
+                    rim.receiveShadow = true;
+                    arenaGroup.add(rim);
+                });
+
                 // Central Reactor Core & Catwalk Bridges
                 addSolidBox(0, 0, 0, 16, 3.2, 16, 0x475569);
                 addSolidBox(0, 3.2, 0, 8, 5.5, 8, 0x0284c7, 0x38bdf8, 0.45);
+                addSolidBox(0, 8.7, 0, 2.2, 3.2, 2.2, 0xe0f2fe, 0x7dd3fc, 0.7);
                 addSolidBox(-18, 2.2, 0, 20, 1.0, 4.2, 0x94a3b8);
                 addSolidBox(18, 2.2, 0, 20, 1.0, 4.2, 0x94a3b8);
 
-                // Lunar Outpost Modules & Crater Rocks
+                // Lunar Outpost Modules, Solar Arrays & Crater Rocks
                 const moonModules = [
                     [-34, -28, 15, 7.5, 13, 0x64748b],
                     [34, -28, 15, 7.5, 13, 0x64748b],
@@ -970,8 +1153,13 @@
                     [-52, 0, 10, 5.0, 10, 0x788496],
                     [52, 0, 10, 5.0, 10, 0x788496]
                 ];
-                moonModules.forEach(([x, z, sx, sy, sz, col]) => {
+                moonModules.forEach(([x, z, sx, sy, sz, col], idx) => {
                     addSolidBox(x, 0, z, sx, sy, sz, col);
+                    // Glowing airlock/window strip & rooftop solar panel
+                    addSolidBox(x, sy * 0.55, z, sx + 0.24, 0.9, sz * 0.65, 0x38bdf8, 0x0ea5e9, 0.55, false, false);
+                    if (idx < 4) {
+                        addSolidBox(x, sy, z, sx * 0.72, 0.45, sz * 0.72, 0x1d4ed8, 0x2563eb, 0.25);
+                    }
                 });
             }
 
@@ -1452,12 +1640,37 @@
                 showManualReloadPrompt();
             }
 
-            const muzzlePos = playerMesh.position.clone().add(new THREE.Vector3(0, state.isCrouching ? 1.05 : 1.75, 0));
-            const aimDir = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(state.pitch, state.yaw, 0, 'YXZ')).normalize();
+            // Aim directly through the center crosshair from the camera's true perspective
+            const camAimDir = new THREE.Vector3();
+            camera.getWorldDirection(camAimDir);
+            const camTargetWall = raycastHitSolid(camera.position, camAimDir, 95);
+            let aimTargetPoint = camTargetWall.point;
+
+            // Check if crosshair is pointing at an enemy first so bullets land precisely on target
+            let crosshairEnemyDist = camTargetWall.hit ? camera.position.distanceTo(camTargetWall.point) : 95;
+            for (const e of enemies) {
+                const center = e.mesh.position.clone().add(new THREE.Vector3(0, e.height * 0.45, 0));
+                const toEnemy = center.clone().sub(camera.position);
+                const projDist = toEnemy.dot(camAimDir);
+                if (projDist > 2.5 && projDist < crosshairEnemyDist) {
+                    const closestPt = camera.position.clone().addScaledVector(camAimDir, projDist);
+                    if (closestPt.distanceTo(center) <= e.halfW + 0.9) {
+                        crosshairEnemyDist = projDist;
+                        aimTargetPoint = closestPt;
+                    }
+                }
+            }
+
+            // Muzzle origin shifted slightly to player's right blaster hand so visual tracer doesn't clip body
+            const rightHandOffset = new THREE.Vector3(0.85, 0, -0.6).applyAxisAngle(new THREE.Vector3(0, 1, 0), state.yaw);
+            const muzzlePos = playerMesh.position.clone()
+                .add(new THREE.Vector3(0, state.isCrouching ? 1.05 : 1.75, 0))
+                .add(rightHandOffset);
+            const aimDir = aimTargetPoint.clone().sub(muzzlePos).normalize();
 
             // Raycast hit check against enemies & solid blocks
             let hitEnemy = null;
-            let bestHitDist = 85;
+            let bestHitDist = 90;
 
             for (const e of enemies) {
                 const center = e.mesh.position.clone().add(new THREE.Vector3(0, e.height * 0.45, 0));
@@ -1466,7 +1679,7 @@
                 if (projDist > 0 && projDist < bestHitDist) {
                     const closestPt = muzzlePos.clone().addScaledVector(aimDir, projDist);
                     const perpDist = closestPt.distanceTo(center);
-                    if (perpDist <= e.halfW + 0.85) {
+                    if (perpDist <= e.halfW + 0.9) {
                         bestHitDist = projDist;
                         hitEnemy = e;
                     }
@@ -1839,107 +2052,128 @@
         function setupOnlinePeerRoom(code, asHost) {
             cleanupPeerNode();
             startRelayPolling(code);
-            setCloudBadge('🌐 ONLINE RELAY + P2P', true);
+            setCloudBadge('🌐 ONLINE RELAY', true);
 
-            if (typeof Peer === 'undefined') {
+            // Canvas/iframe sandboxes block external WebSocket (wss://) connections with a SecurityError.
+            // Skip PeerJS WebSocket setup inside sandboxed iframes and use the HTTPS relay + cloud sync seamlessly.
+            const isSandboxedFrame = (() => {
+                try {
+                    return window.self !== window.top || window.location.protocol === 'about:' || window.location.protocol === 'blob:';
+                } catch (e) {
+                    return true;
+                }
+            })();
+
+            if (isSandboxedFrame || typeof Peer === 'undefined') {
                 return;
             }
 
-            if (asHost) {
-                // Admin claims deterministic Peer ID based on Room Code (e.g., blox-zombie-arena-3d-v1-ZMB189)
-                const hostPeerId = PEER_PREFIX + code.toUpperCase();
-                peerNode = new Peer(hostPeerId, { debug: 0, config: PEER_RTC_CONFIG });
+            try {
+                if (asHost) {
+                    // Admin claims deterministic Peer ID based on Room Code (e.g., blox-zombie-arena-3d-v1-ZMB189)
+                    const hostPeerId = PEER_PREFIX + code.toUpperCase();
+                    peerNode = new Peer(hostPeerId, { debug: 0, config: PEER_RTC_CONFIG });
 
-                peerNode.on('open', () => {
-                    setCloudBadge('🌐 ONLINE P2P', true);
-                });
-
-                peerNode.on('connection', (conn) => {
-                    conn.on('open', () => {
+                    peerNode.on('open', () => {
                         setCloudBadge('🌐 ONLINE P2P', true);
-                        conn.send({
-                            type: 'lobby_roster',
-                            peerId: myPeerId,
-                            roomCode: state.roomCode,
-                            arena: state.arena,
-                            members: Array.from(waitingRoomMembers.values())
-                        });
                     });
 
-                    conn.on('data', (data) => {
-                        if (!data || typeof data !== 'object') return;
-                        if (data.peerId) {
-                            hostClientConns.set(data.peerId, conn);
-                        }
-                        handleIncomingRoomMessage(data);
-
-                        if (data.type === 'lobby_join' || data.type === 'lobby_ping') {
-                            broadcastLobbyRosterFromHost();
-                        } else if (data.type === 'state' || data.type === 'shoot') {
-                            hostClientConns.forEach((otherConn, otherPid) => {
-                                if (otherPid !== data.peerId && otherConn && otherConn.open) {
-                                    try { otherConn.send(data); } catch (e) {}
-                                }
+                    peerNode.on('connection', (conn) => {
+                        conn.on('open', () => {
+                            setCloudBadge('🌐 ONLINE P2P', true);
+                            conn.send({
+                                type: 'lobby_roster',
+                                peerId: myPeerId,
+                                roomCode: state.roomCode,
+                                arena: state.arena,
+                                members: Array.from(waitingRoomMembers.values())
                             });
-                        }
-                    });
-
-                    conn.on('close', () => {
-                        for (const [pid, c] of hostClientConns.entries()) {
-                            if (c === conn) {
-                                hostClientConns.delete(pid);
-                                waitingRoomMembers.delete(pid);
-                                break;
-                            }
-                        }
-                        renderWaitingRoomUI();
-                        broadcastLobbyRosterFromHost();
-                    });
-                });
-
-                peerNode.on('error', (err) => {
-                    if (err && err.type === 'unavailable-id') {
-                        state.roomCode = 'ZMB' + Math.floor(100 + Math.random() * 900);
-                        document.getElementById('lobby-room-code').textContent = state.roomCode;
-                        waitingRoomMembers.clear();
-                        syncSelfInWaitingRoom();
-                        setupOnlinePeerRoom(state.roomCode, true);
-                    }
-                });
-            } else {
-                // Friend connects directly to Host's Room Code Peer ID + Relay channel
-                peerNode = new Peer({ debug: 0, config: PEER_RTC_CONFIG });
-
-                peerNode.on('open', () => {
-                    const targetHostId = PEER_PREFIX + code.toUpperCase();
-                    const conn = peerNode.connect(targetHostId, { reliable: true });
-                    clientHostConn = conn;
-
-                    conn.on('open', () => {
-                        setCloudBadge('🌐 TERHUBUNG KE ADMIN', true);
-                        conn.send({
-                            type: 'lobby_join',
-                            peerId: myPeerId,
-                            roomCode: state.roomCode,
-                            nickname: state.nickname,
-                            isHost: false
                         });
-                        showToast(`✅ Berhasil terhubung ke Room ${state.roomCode}!`);
+
+                        conn.on('data', (data) => {
+                            if (!data || typeof data !== 'object') return;
+                            if (data.peerId) {
+                                hostClientConns.set(data.peerId, conn);
+                            }
+                            handleIncomingRoomMessage(data);
+
+                            if (data.type === 'lobby_join' || data.type === 'lobby_ping') {
+                                broadcastLobbyRosterFromHost();
+                            } else if (data.type === 'state' || data.type === 'shoot') {
+                                hostClientConns.forEach((otherConn, otherPid) => {
+                                    if (otherPid !== data.peerId && otherConn && otherConn.open) {
+                                        try { otherConn.send(data); } catch (e) {}
+                                    }
+                                });
+                            }
+                        });
+
+                        conn.on('close', () => {
+                            for (const [pid, c] of hostClientConns.entries()) {
+                                if (c === conn) {
+                                    hostClientConns.delete(pid);
+                                    waitingRoomMembers.delete(pid);
+                                    break;
+                                }
+                            }
+                            renderWaitingRoomUI();
+                            broadcastLobbyRosterFromHost();
+                        });
                     });
 
-                    conn.on('data', (data) => {
-                        if (!data || typeof data !== 'object') return;
-                        handleIncomingRoomMessage(data);
+                    peerNode.on('error', (err) => {
+                        if (err && err.type === 'unavailable-id') {
+                            state.roomCode = 'ZMB' + Math.floor(100 + Math.random() * 900);
+                            document.getElementById('lobby-room-code').textContent = state.roomCode;
+                            waitingRoomMembers.clear();
+                            syncSelfInWaitingRoom();
+                            setupOnlinePeerRoom(state.roomCode, true);
+                        } else {
+                            setCloudBadge('🌐 ONLINE RELAY', true);
+                        }
+                    });
+                } else {
+                    // Friend connects directly to Host's Room Code Peer ID + Relay channel
+                    peerNode = new Peer({ debug: 0, config: PEER_RTC_CONFIG });
+
+                    peerNode.on('open', () => {
+                        try {
+                            const targetHostId = PEER_PREFIX + code.toUpperCase();
+                            const conn = peerNode.connect(targetHostId, { reliable: true });
+                            clientHostConn = conn;
+
+                            conn.on('open', () => {
+                                setCloudBadge('🌐 TERHUBUNG KE ADMIN', true);
+                                conn.send({
+                                    type: 'lobby_join',
+                                    peerId: myPeerId,
+                                    roomCode: state.roomCode,
+                                    nickname: state.nickname,
+                                    isHost: false
+                                });
+                                showToast(`✅ Berhasil terhubung ke Room ${state.roomCode}!`);
+                            });
+
+                            conn.on('data', (data) => {
+                                if (!data || typeof data !== 'object') return;
+                                handleIncomingRoomMessage(data);
+                            });
+
+                            conn.on('close', () => {
+                                setCloudBadge('🌐 ONLINE RELAY', true);
+                            });
+                        } catch (e) {
+                            setCloudBadge('🌐 ONLINE RELAY', true);
+                        }
                     });
 
-                    conn.on('close', () => {
+                    peerNode.on('error', () => {
                         setCloudBadge('🌐 ONLINE RELAY', true);
                     });
-                });
-
-                peerNode.on('error', () => {
-                    setCloudBadge('🌐 ONLINE RELAY', true);
-                });
+                }
+            } catch (err) {
+                peerNode = null;
+                setCloudBadge('🌐 ONLINE RELAY', true);
             }
         }
 
@@ -2509,9 +2743,9 @@
                 selectArenaCard(msg.arena || state.arena, false);
                 showToast('🚀 Admin telah memulai sesi! Masuk ke arena...');
                 startGameSession(true);
-            } else if (msg.type === 'state' && state.isPlaying) {
+            } else if (msg.type === 'state' && state.isPlaying && state.mode === 'multi') {
                 spawnOrUpdateRemotePeer(msg);
-            } else if (msg.type === 'shoot' && state.isPlaying) {
+            } else if (msg.type === 'shoot' && state.isPlaying && state.mode === 'multi') {
                 const start = new THREE.Vector3(msg.pos[0], msg.pos[1] + 1.6, msg.pos[2]);
                 const dir = new THREE.Vector3(-Math.sin(msg.yaw), 0, -Math.cos(msg.yaw));
                 createLaserTracer(start, start.clone().add(dir.multiplyScalar(32)), 0xfacc15);
@@ -2519,66 +2753,62 @@
         }
 
         // ==========================================
-        // 13. INPUT CONTROLS (WASD + SHIFT + C/CTRL CROUCH + SPACE + 1/R RELOAD)
+        // 12. LOW CROUCH TOGGLE HELPER
         // ==========================================
-        const keys = {};
-        let isPointerLocked = false;
-        let isMouseDragging = false;
-        let lastMouseX = 0, lastMouseY = 0;
-
         function setCrouchState(wantCrouch) {
-            if (!state.isPlaying || state.isQuizOpen || state.isRespawning) return;
-            if (wantCrouch === state.isCrouching) return;
-
-            if (wantCrouch) {
+            if (!state.isPlaying || state.isRespawning || state.isQuizOpen) return;
+            if (wantCrouch && !state.isCrouching) {
                 state.isCrouching = true;
                 currentColliderH = PLAYER_CROUCH_H;
                 sfx.crouch();
-            } else {
+                updateStanceHUD();
+            } else if (!wantCrouch && state.isCrouching) {
                 if (canStandAtHeight(playerMesh.position.x, playerMesh.position.y, playerMesh.position.z, PLAYER_HALF_W, PLAYER_STAND_H)) {
                     state.isCrouching = false;
                     currentColliderH = PLAYER_STAND_H;
-                    sfx.crouch();
+                    updateStanceHUD();
                 } else {
-                    showToast('Atap terlalu rendah untuk berdiri! Keluar dari celah dulu.');
+                    showToast('⚠️ Tidak bisa berdiri, ada penghalang di atas kepala!');
                 }
             }
-            updateStanceHUD();
         }
 
-        window.addEventListener('keydown', (e) => {
-            const code = e.code;
+        // ==========================================
+        // 13. DESKTOP & MOBILE TOUCH INPUT CONTROLS
+        // ==========================================
+        const keys = {};
+        let isMouseDragging = false;
+        let lastMouseX = 0, lastMouseY = 0;
 
-            // Open Edu-Reload Quiz ONLY when pressing 1 or R
-            if ((code === 'Digit1' || code === 'Numpad1' || code === 'KeyR') && state.isPlaying && !state.isQuizOpen && !state.isRespawning) {
+        window.addEventListener('keydown', (e) => {
+            if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+
+            if (state.isQuizOpen) {
+                if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code)) {
+                    const idx = parseInt(e.code.replace('Digit', ''), 10) - 1;
+                    const btns = document.getElementById('quiz-options').querySelectorAll('button');
+                    if (btns[idx]) btns[idx].click();
+                } else if (e.code === 'Escape') {
+                    closeReloadQuizWithoutReload();
+                }
+                return;
+            }
+
+            keys[e.code] = true;
+
+            if ((e.code === 'Digit1' || e.code === 'KeyR') && state.isPlaying && !state.isRespawning) {
+                e.preventDefault();
                 openReloadQuiz();
                 return;
             }
 
-            // Close Quiz with Escape
-            if (code === 'Escape' && state.isQuizOpen) {
-                closeReloadQuizWithoutReload();
-                return;
-            }
-
-            // Answer Quiz with Keys 1-4 while Quiz Modal is open
-            if (state.isQuizOpen) {
-                const numMap = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 };
-                if (code in numMap) {
-                    const btns = document.getElementById('quiz-options').querySelectorAll('button');
-                    if (btns[numMap[code]]) btns[numMap[code]].click();
-                }
-                return;
-            }
-
-            // Crouch toggle / hold with C or Control
-            if ((code === 'KeyC' || code === 'ControlLeft' || code === 'ControlRight') && !e.repeat) {
+            if ((e.code === 'KeyC' || e.code === 'ControlLeft' || e.code === 'ControlRight') && state.isPlaying) {
+                e.preventDefault();
                 setCrouchState(!state.isCrouching);
+                return;
             }
 
-            keys[code] = true;
-
-            if (code === 'Space' && state.isPlaying && !state.isRespawning && state.canJump) {
+            if (e.code === 'Space' && state.isPlaying && !state.isRespawning && state.canJump) {
                 const baseJump = state.arena === 'moon' ? 14.5 : 14.2;
                 state.velocity.y = state.isCrouching ? baseJump * 0.78 : baseJump;
                 state.canJump = false;
@@ -2588,54 +2818,126 @@
 
         window.addEventListener('keyup', (e) => {
             keys[e.code] = false;
-            if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
-                setCrouchState(false);
-            }
         });
 
         canvas.addEventListener('mousedown', (e) => {
             if (!state.isPlaying || state.isQuizOpen || state.isRespawning) return;
             sfx.init();
-            if (!isPointerLocked && canvas.requestPointerLock) {
+            if (document.pointerLockElement !== canvas && canvas.requestPointerLock) {
                 canvas.requestPointerLock();
             }
-            if (e.button === 0) firePlayerWeapon();
-            isMouseDragging = true;
-            lastMouseX = e.clientX;
-            lastMouseY = e.clientY;
+            if (e.button === 0) {
+                firePlayerWeapon();
+                isMouseDragging = true;
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+            }
         });
 
         window.addEventListener('mouseup', () => { isMouseDragging = false; });
 
-        document.addEventListener('pointerlockchange', () => {
-            isPointerLocked = (document.pointerLockElement === canvas);
-        });
-
         window.addEventListener('mousemove', (e) => {
             if (!state.isPlaying || state.isQuizOpen || state.isRespawning) return;
-            if (isPointerLocked) {
+            if (document.pointerLockElement === canvas) {
                 state.yaw -= e.movementX * 0.0024;
-                state.pitch = Math.max(-0.55, Math.min(0.85, state.pitch + e.movementY * 0.002));
+                state.pitch = Math.max(-0.55, Math.min(0.85, state.pitch + e.movementY * 0.0021));
             } else if (isMouseDragging) {
-                const dx = e.clientX - lastMouseX;
-                const dy = e.clientY - lastMouseY;
+                state.yaw -= (e.clientX - lastMouseX) * 0.0042;
+                state.pitch = Math.max(-0.55, Math.min(0.85, state.pitch + (e.clientY - lastMouseY) * 0.0036));
                 lastMouseX = e.clientX;
                 lastMouseY = e.clientY;
-                state.yaw -= dx * 0.004;
-                state.pitch = Math.max(-0.55, Math.min(0.85, state.pitch + dy * 0.003));
             }
         });
 
-        // Touch controls
+        // Touch controls (360° Virtual Analog Joystick + Camera Lookpad + Auto-Fire Hold)
+        const mobileMoveInput = { x: 0, z: 0, sprint: false };
+        let joystickTouchId = null;
         let touchLookId = null, touchLastX = 0, touchLastY = 0;
+        let mobileFiringHold = false;
+        let mobileFireInterval = null;
+
+        const joyBase = document.getElementById('mobile-joystick-base');
+        const joyKnob = document.getElementById('mobile-joystick-knob');
+
+        function updateJoystickFromTouch(touch) {
+            if (!joyBase || !joyKnob) return;
+            const rect = joyBase.getBoundingClientRect();
+            const centerX = rect.left + rect.width * 0.5;
+            const centerY = rect.top + rect.height * 0.5;
+            const maxRadius = rect.width * 0.38;
+
+            let dx = touch.clientX - centerX;
+            let dy = touch.clientY - centerY;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist > maxRadius) {
+                dx = (dx / dist) * maxRadius;
+                dy = (dy / dist) * maxRadius;
+            }
+
+            joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+            const norm = Math.min(1, dist / maxRadius);
+            if (norm < 0.14) {
+                mobileMoveInput.x = 0;
+                mobileMoveInput.z = 0;
+                mobileMoveInput.sprint = false;
+            } else {
+                mobileMoveInput.x = dx / maxRadius;
+                mobileMoveInput.z = -dy / maxRadius; // up on screen = forward (+1)
+                mobileMoveInput.sprint = norm > 0.78;
+            }
+        }
+
+        function resetJoystick() {
+            joystickTouchId = null;
+            mobileMoveInput.x = 0;
+            mobileMoveInput.z = 0;
+            mobileMoveInput.sprint = false;
+            if (joyKnob) joyKnob.style.transform = 'translate(0px, 0px)';
+        }
+
+        if (joyBase) {
+            joyBase.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                sfx.init();
+                const t = e.changedTouches[0];
+                joystickTouchId = t.identifier;
+                updateJoystickFromTouch(t);
+            }, { passive: false });
+
+            joyBase.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                for (const t of e.changedTouches) {
+                    if (t.identifier === joystickTouchId) {
+                        updateJoystickFromTouch(t);
+                    }
+                }
+            }, { passive: false });
+
+            const endJoy = (e) => {
+                for (const t of e.changedTouches) {
+                    if (t.identifier === joystickTouchId) {
+                        resetJoystick();
+                    }
+                }
+            };
+            joyBase.addEventListener('touchend', endJoy);
+            joyBase.addEventListener('touchcancel', endJoy);
+        }
+
+        // Touch drag on 3D canvas rotates camera smoothly without blocking joystick
         canvas.addEventListener('touchstart', (e) => {
             if (!state.isPlaying || state.isQuizOpen || state.isRespawning) return;
             sfx.init();
-            const t = e.changedTouches[0];
-            touchLookId = t.identifier;
-            touchLastX = t.clientX;
-            touchLastY = t.clientY;
-            firePlayerWeapon();
+            for (const t of e.changedTouches) {
+                if (t.identifier !== joystickTouchId && touchLookId === null) {
+                    touchLookId = t.identifier;
+                    touchLastX = t.clientX;
+                    touchLastY = t.clientY;
+                }
+            }
         }, { passive: true });
 
         canvas.addEventListener('touchmove', (e) => {
@@ -2646,33 +2948,71 @@
                     const dy = t.clientY - touchLastY;
                     touchLastX = t.clientX;
                     touchLastY = t.clientY;
-                    state.yaw -= dx * 0.005;
-                    state.pitch = Math.max(-0.55, Math.min(0.85, state.pitch + dy * 0.004));
+                    state.yaw -= dx * 0.0062;
+                    state.pitch = Math.max(-0.55, Math.min(0.85, state.pitch + dy * 0.0048));
                 }
             }
         }, { passive: true });
 
-        function bindMobileHold(btnId, keyCode) {
-            const btn = document.getElementById(btnId);
-            if (!btn) return;
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); keys[keyCode] = true; });
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[keyCode] = false; });
+        const endLookTouch = (e) => {
+            for (const t of e.changedTouches) {
+                if (t.identifier === touchLookId) {
+                    touchLookId = null;
+                }
+            }
+        };
+        canvas.addEventListener('touchend', endLookTouch, { passive: true });
+        canvas.addEventListener('touchcancel', endLookTouch, { passive: true });
+
+        // Mobile Action Buttons (Fire Hold, Jump, Crouch, Reload Quiz, Exit)
+        const mobFireBtn = document.getElementById('mob-fire');
+        if (mobFireBtn) {
+            mobFireBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                sfx.init();
+                firePlayerWeapon();
+                mobileFiringHold = true;
+                clearInterval(mobileFireInterval);
+                mobileFireInterval = setInterval(() => {
+                    if (mobileFiringHold && state.isPlaying && !state.isQuizOpen && !state.isRespawning && state.ammo > 0) {
+                        firePlayerWeapon();
+                    }
+                }, 170);
+            }, { passive: false });
+
+            const stopMobFire = (e) => {
+                e.preventDefault();
+                mobileFiringHold = false;
+                clearInterval(mobileFireInterval);
+            };
+            mobFireBtn.addEventListener('touchend', stopMobFire);
+            mobFireBtn.addEventListener('touchcancel', stopMobFire);
         }
-        bindMobileHold('mob-left', 'KeyA');
-        bindMobileHold('mob-right', 'KeyD');
-        bindMobileHold('mob-up', 'KeyW');
+
         document.getElementById('mob-crouch').addEventListener('touchstart', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             setCrouchState(!state.isCrouching);
-        });
+        }, { passive: false });
+
         document.getElementById('mob-jump').addEventListener('touchstart', (e) => {
             e.preventDefault();
-            if (state.canJump && !state.isRespawning) {
-                state.velocity.y = 14.2;
+            e.stopPropagation();
+            if (state.canJump && !state.isRespawning && !state.isQuizOpen) {
+                const baseJump = state.arena === 'moon' ? 14.5 : 14.2;
+                state.velocity.y = state.isCrouching ? baseJump * 0.78 : baseJump;
                 state.canJump = false;
                 sfx.jump();
             }
-        });
+        }, { passive: false });
+
+        document.getElementById('mob-reload').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openReloadQuiz();
+        }, { passive: false });
+        document.getElementById('mob-reload').addEventListener('click', openReloadQuiz);
 
         // ==========================================
         // 14. MAIN SIMULATION & ANIMATION LOOP
@@ -2735,13 +3075,14 @@
 
             // --- 1. PLAYER MOVEMENT & LOW CROUCH ---
             if (!state.isQuizOpen && !state.isRespawning) {
-                let forward = 0, strafe = 0;
+                let forward = mobileMoveInput.z;
+                let strafe = mobileMoveInput.x;
                 if (keys['KeyW'] || keys['ArrowUp']) forward += 1;
                 if (keys['KeyS'] || keys['ArrowDown']) forward -= 1;
                 if (keys['KeyA'] || keys['ArrowLeft']) strafe -= 1;
                 if (keys['KeyD'] || keys['ArrowRight']) strafe += 1;
 
-                const isSprinting = (keys['ShiftLeft'] || keys['ShiftRight']) && !state.isCrouching;
+                const isSprinting = (keys['ShiftLeft'] || keys['ShiftRight'] || mobileMoveInput.sprint) && !state.isCrouching;
                 const moveSpeed = state.isCrouching ? 7.8 : (isSprinting ? 18.8 : 13.8);
 
                 const sinY = Math.sin(state.yaw);
@@ -2752,8 +3093,9 @@
                 const len = Math.hypot(dirX, dirZ);
 
                 if (len > 0.001) {
-                    state.velocity.x = (dirX / len) * moveSpeed;
-                    state.velocity.z = (dirZ / len) * moveSpeed;
+                    const clampScale = Math.min(1, len);
+                    state.velocity.x = (dirX / len) * moveSpeed * clampScale;
+                    state.velocity.z = (dirZ / len) * moveSpeed * clampScale;
                 } else {
                     state.velocity.x = 0;
                     state.velocity.z = 0;
@@ -2777,18 +3119,18 @@
                 walkCycle = walkObj.walkPhase;
             }
 
-            // Over-the-shoulder Third-Person Camera (Lowers smoothly when crouching)
-            const shoulderOffset = new THREE.Vector3(0.95, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), state.yaw);
-            const camTargetHeight = state.isCrouching ? 1.15 : 2.15;
+            // Over-the-shoulder Third-Person Camera (Pulled back & offset right for clear crosshair sightline)
+            const shoulderOffset = new THREE.Vector3(1.65, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), state.yaw);
+            const camTargetHeight = state.isCrouching ? 1.35 : 2.35;
             const camTarget = playerMesh.position.clone().add(new THREE.Vector3(0, camTargetHeight, 0)).add(shoulderOffset);
-            const camDist = state.isCrouching ? 4.4 : 5.3;
+            const camDist = state.isCrouching ? 6.4 : 7.6;
             const camOffset = new THREE.Vector3(
                 Math.sin(state.yaw) * camDist * Math.cos(state.pitch),
-                Math.sin(state.pitch) * camDist + (state.isCrouching ? 0.45 : 0.8),
+                Math.sin(state.pitch) * camDist + (state.isCrouching ? 0.65 : 1.05),
                 Math.cos(state.yaw) * camDist * Math.cos(state.pitch)
             );
             camera.position.copy(camTarget).add(camOffset);
-            if (camera.position.y < 0.55) camera.position.y = 0.55;
+            if (camera.position.y < 0.75) camera.position.y = 0.75;
             camera.lookAt(camTarget);
 
             // --- 2. AI ALLY BOTS (SOLO MODE) ---
@@ -3123,6 +3465,11 @@
                 ? 'text-2xl sm:text-3xl font-black text-rose-500'
                 : (state.ammo <= 12 ? 'text-2xl sm:text-3xl font-black text-amber-400' : 'text-2xl sm:text-3xl font-black text-emerald-400');
 
+            const mobAmmoLabel = document.getElementById('mob-ammo-label');
+            if (mobAmmoLabel) {
+                mobAmmoLabel.textContent = `${state.ammo}/${MAX_AMMO}`;
+            }
+
             updateStanceHUD();
         }
 
@@ -3403,6 +3750,7 @@
         }
 
         document.getElementById('btn-exit-lobby').addEventListener('click', returnToLobby);
+        document.getElementById('btn-mobile-exit').addEventListener('click', returnToLobby);
         document.getElementById('btn-back-lobby').addEventListener('click', returnToLobby);
 
         // ==========================================
