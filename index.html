@@ -34,15 +34,67 @@
         /* Show mobile touch controls on any touch/coarse-pointer device (portrait or landscape) */
         @media (pointer: coarse), (max-width: 767px) {
             #mobile-controls { display: flex !important; }
-            #desktop-hud-hint, #desktop-ammo-box { display: none !important; }
+            #desktop-hud-hint, #desktop-controls-hint, #desktop-ammo-box { display: none !important; }
+            /* Compact top HUD cards on mobile so 3D arena view stays wide open */
+            #hud-screen { padding: 6px 8px !important; }
+            #hud-hp-card {
+                width: 122px !important;
+                padding: 5px 7px !important;
+                border-radius: 10px !important;
+                border-width: 1.5px !important;
+                background: rgba(2, 6, 23, 0.72) !important;
+            }
+            #hud-hp-card .hud-hp-header { font-size: 9px !important; margin-bottom: 2px !important; }
+            #hud-hp-bar-wrap { height: 6px !important; }
+            #hud-squad-list {
+                display: block !important;
+                margin-top: 3px !important;
+                max-height: 28px !important;
+                font-size: 8.5px !important;
+                line-height: 1.15 !important;
+            }
+            #hud-timer-box {
+                padding: 4px 10px !important;
+                border-radius: 10px !important;
+                border-width: 1.5px !important;
+                background: rgba(2, 6, 23, 0.76) !important;
+            }
+            #hud-timer-label, #hud-arena-label { display: none !important; }
+            #hud-timer { font-size: 16px !important; line-height: 1.1 !important; }
+            #hud-wave-row { font-size: 8.5px !important; margin-top: 1px !important; }
+            #hud-score-card {
+                padding: 5px 8px !important;
+                border-radius: 10px !important;
+                border-width: 1.5px !important;
+                background: rgba(2, 6, 23, 0.72) !important;
+            }
+            #hud-score { font-size: 14px !important; line-height: 1.1 !important; }
+            #hud-kd-row { font-size: 8.5px !important; }
+            #hud-room-badge { display: none !important; }
+            /* Compact center alerts on mobile */
+            #respawn-overlay {
+                padding: 10px 16px !important;
+                border-radius: 16px !important;
+                max-width: 240px !important;
+            }
+            #respawn-overlay .respawn-title { font-size: 13px !important; }
+            #respawn-countdown { font-size: 28px !important; margin: 0 !important; }
+            #respawn-overlay .respawn-sub { font-size: 9px !important; }
+            #manual-reload-prompt {
+                padding: 8px 12px !important;
+                border-radius: 12px !important;
+                max-width: 250px !important;
+            }
+            #mobile-joystick-base { width: 92px !important; height: 92px !important; }
+            #mobile-joystick-knob { width: 38px !important; height: 38px !important; margin-top: -19px !important; margin-left: -19px !important; }
         }
-        /* Compact lobby & HUD when phone is rotated to landscape */
+        /* Extra compact lobby & HUD when phone is rotated to landscape */
         @media (max-height: 520px) and (pointer: coarse) {
             #lobby-screen { align-items: flex-start !important; padding: 8px !important; }
             #lobby-card { padding: 12px !important; }
-            #hud-screen { padding: 8px 12px !important; }
-            #mobile-joystick-base { width: 96px !important; height: 96px !important; }
-            #mobile-joystick-knob { width: 40px !important; height: 40px !important; margin-top: -20px !important; margin-left: -20px !important; }
+            #hud-screen { padding: 4px 8px !important; }
+            #mobile-joystick-base { width: 84px !important; height: 84px !important; }
+            #mobile-joystick-knob { width: 34px !important; height: 34px !important; margin-top: -17px !important; margin-left: -17px !important; }
         }
         input, button {
             touch-action: manipulation;
@@ -131,14 +183,6 @@
             border: 2px solid #ffffff;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
             pointer-events: none;
-        }
-        @media (pointer: coarse) {
-            #mobile-controls { display: flex !important; }
-            #desktop-controls-hint, #desktop-ammo-box { display: none !important; }
-        }
-        @media (max-height: 460px) {
-            #lobby-screen { align-items: flex-start !important; padding-top: 0.5rem !important; }
-            #hud-screen { padding: 0.45rem !important; }
         }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); border-radius: 99px; }
@@ -351,15 +395,15 @@
         <!-- Top Bar -->
         <div class="flex items-start justify-between gap-1.5 sm:gap-2">
             <!-- Left: Health & Stance & Squad -->
-            <div class="bg-slate-950/85 border-2 border-slate-700/90 rounded-xl sm:rounded-2xl p-2 sm:p-3 w-36 sm:w-64 backdrop-blur-md">
-                <div class="flex justify-between items-center text-[10px] sm:text-xs font-extrabold text-white mb-1">
+            <div id="hud-hp-card" class="bg-slate-950/85 border-2 border-slate-700/90 rounded-xl sm:rounded-2xl p-2 sm:p-3 w-36 sm:w-64 backdrop-blur-md">
+                <div class="hud-hp-header flex justify-between items-center text-[10px] sm:text-xs font-extrabold text-white mb-1">
                     <div class="flex items-center gap-1 min-w-0">
                         <span id="hud-player-name" class="text-yellow-300 truncate max-w-[68px] sm:max-w-[100px]">BloxHunter</span>
                         <span id="hud-stance-badge" class="hidden sm:inline-block bg-slate-800 text-slate-300 text-[9px] px-1.5 py-0.5 rounded font-bold">BERDIRI</span>
                     </div>
                     <span id="hud-hp-text" class="shrink-0">100 HP</span>
                 </div>
-                <div class="w-full h-2.5 sm:h-3.5 bg-slate-800 rounded-full overflow-hidden border border-slate-600">
+                <div id="hud-hp-bar-wrap" class="w-full h-2.5 sm:h-3.5 bg-slate-800 rounded-full overflow-hidden border border-slate-600">
                     <div id="hud-hp-bar" class="h-full bg-gradient-to-r from-emerald-400 to-green-500 transition-all duration-150" style="width: 100%"></div>
                 </div>
                 <div id="hud-squad-list" class="hidden sm:block mt-2 space-y-1 text-[11px] text-slate-300 max-h-24 overflow-y-auto pr-0.5"></div>
@@ -367,9 +411,9 @@
 
             <!-- Center: 3-Minute Session Countdown & Wave Info -->
             <div id="hud-timer-box" class="bg-slate-950/90 border-2 border-amber-400/70 rounded-xl sm:rounded-2xl px-2.5 sm:px-4 py-1 sm:py-2 text-center backdrop-blur-md shadow-xl">
-                <div class="hidden sm:block text-[9px] font-extrabold uppercase tracking-widest text-amber-300">SISA WAKTU SESI</div>
+                <div id="hud-timer-label" class="hidden sm:block text-[9px] font-extrabold uppercase tracking-widest text-amber-300">SISA WAKTU SESI</div>
                 <div id="hud-timer" class="roblox-font text-lg sm:text-3xl font-black text-white tracking-wider leading-none sm:leading-normal">03:00</div>
-                <div class="flex items-center justify-center gap-1.5 text-[9px] sm:text-[11px] font-bold text-slate-300 mt-0.5">
+                <div id="hud-wave-row" class="flex items-center justify-center gap-1.5 text-[9px] sm:text-[11px] font-bold text-slate-300 mt-0.5">
                     <span>W<span id="hud-wave" class="text-yellow-300">1</span></span>
                     <span>•</span>
                     <span>👾<span id="hud-enemies-left" class="text-rose-400">0</span></span>
@@ -378,18 +422,18 @@
             </div>
 
             <!-- Right: Kills, Deaths & Score -->
-            <div class="bg-slate-950/85 border-2 border-slate-700/90 rounded-xl sm:rounded-2xl p-2 sm:p-3 text-right backdrop-blur-md">
+            <div id="hud-score-card" class="bg-slate-950/85 border-2 border-slate-700/90 rounded-xl sm:rounded-2xl p-2 sm:p-3 text-right backdrop-blur-md">
                 <div class="flex items-center justify-end gap-1">
                     <span class="hidden sm:inline text-[10px] font-bold text-slate-400 uppercase">SKOR</span>
-                    <button id="btn-hud-fullscreen" type="button" class="pointer-events-auto bg-slate-800/90 active:bg-slate-700 border border-slate-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md cursor-pointer" title="Layar Penuh">
+                    <button id="btn-hud-fullscreen" type="button" class="pointer-events-auto bg-slate-800/90 active:bg-slate-700 border border-slate-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-md cursor-pointer" title="Layar Penuh">
                         ⛶
                     </button>
-                    <button id="btn-mobile-exit" class="pointer-events-auto bg-rose-600/90 active:bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-md">
+                    <button id="btn-mobile-exit" class="pointer-events-auto bg-rose-600/90 active:bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-md">
                         ✕
                     </button>
                 </div>
                 <div id="hud-score" class="text-base sm:text-2xl font-black text-yellow-300 leading-tight">0</div>
-                <div class="text-[10px] sm:text-[11px] font-bold text-slate-300">
+                <div id="hud-kd-row" class="text-[10px] sm:text-[11px] font-bold text-slate-300">
                     <span class="text-emerald-400">🔫<span id="hud-kills">0</span></span>
                     <span class="mx-0.5 text-slate-600">|</span>
                     <span class="text-rose-400">💀<span id="hud-deaths">0</span></span>
@@ -399,55 +443,55 @@
         </div>
 
         <!-- Center Alert: Manual Reload Prompt (Triggered ONLY when player presses 1 or R) -->
-        <div id="manual-reload-prompt" class="hidden self-center bg-slate-950/95 border-2 border-amber-400 px-5 py-3 rounded-2xl text-center shadow-2xl pointer-events-auto urgent-pulse">
-            <div class="text-sm sm:text-base font-black text-rose-400 tracking-wide">⚠️ PELURU HABIS (0 / 50)!</div>
-            <div class="text-xs sm:text-sm font-bold text-white mt-0.5">
+        <div id="manual-reload-prompt" class="hidden self-center bg-slate-950/90 border-2 border-amber-400 px-4 py-2 rounded-2xl text-center shadow-2xl pointer-events-auto urgent-pulse">
+            <div class="text-xs sm:text-base font-black text-rose-400 tracking-wide">⚠️ PELURU HABIS (0 / 50)!</div>
+            <div class="hidden sm:block text-xs sm:text-sm font-bold text-white mt-0.5">
                 Tekan tombol <kbd class="bg-amber-400 text-slate-950 px-2 py-0.5 rounded font-black">1</kbd> atau <kbd class="bg-amber-400 text-slate-950 px-2 py-0.5 rounded font-black">R</kbd> untuk membuka Kuis Isi Ulang 50 Peluru
             </div>
-            <button id="btn-hud-open-quiz" class="mt-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs px-4 py-1.5 rounded-xl cursor-pointer shadow">
-                🧠 Buka Kuis Reload Sekarang [1]
+            <button id="btn-hud-open-quiz" class="mt-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] sm:text-xs px-3 py-1 rounded-xl cursor-pointer shadow">
+                🧠 Kuis Reload 50 Peluru
             </button>
         </div>
 
         <!-- Center Alert: Respawn Countdown Overlay -->
-        <div id="respawn-overlay" class="hidden self-center bg-slate-950/92 border-2 border-rose-500 px-7 py-5 rounded-3xl text-center shadow-2xl">
-            <div class="text-xs font-extrabold uppercase tracking-widest text-rose-400">KAMU TUMBANG!</div>
-            <div class="roblox-font text-2xl sm:text-3xl font-black text-white mt-1">HIDUP KEMBALI DALAM</div>
-            <div id="respawn-countdown" class="roblox-font text-5xl font-black text-yellow-300 my-1">3</div>
-            <div class="text-[11px] text-slate-300">Sesi 3 menit masih berjalan — siap tempur lagi!</div>
+        <div id="respawn-overlay" class="hidden self-center bg-slate-950/88 border-2 border-rose-500 px-5 py-3 rounded-2xl text-center shadow-2xl">
+            <div class="text-[10px] font-extrabold uppercase tracking-widest text-rose-400">KAMU TUMBANG!</div>
+            <div class="respawn-title roblox-font text-lg sm:text-3xl font-black text-white mt-0.5">HIDUP KEMBALI DALAM</div>
+            <div id="respawn-countdown" class="roblox-font text-3xl sm:text-5xl font-black text-yellow-300 my-0.5">3</div>
+            <div class="respawn-sub text-[10px] sm:text-[11px] text-slate-300">Sesi 3 menit masih berjalan!</div>
         </div>
 
         <!-- Bottom Bar: Weapon, Ammo (50/50) & Manual Quiz Trigger -->
         <div class="flex items-end justify-between gap-2 w-full">
             <!-- Mobile Virtual Joystick & Action Controls (Touch Devices / Small Screens) -->
-            <div id="mobile-controls" class="pointer-events-auto flex md:hidden items-end justify-between w-full gap-2 pb-1">
+            <div id="mobile-controls" class="pointer-events-auto flex md:hidden items-end justify-between w-full gap-2 pb-0.5">
                 <!-- Left: 360° Virtual Analog Stick (Move + Auto-Sprint at outer edge) -->
-                <div class="flex flex-col items-center gap-1">
+                <div class="flex flex-col items-center gap-0.5">
                     <div id="mobile-joystick-base">
                         <div id="mobile-joystick-knob"></div>
                     </div>
-                    <span class="text-[9px] font-extrabold text-slate-300 bg-slate-950/75 px-2 py-0.5 rounded-full">GESER JALAN / LARI</span>
+                    <span class="text-[8px] font-extrabold text-slate-300 bg-slate-950/70 px-1.5 py-0.5 rounded-full">JALAN / LARI</span>
                 </div>
 
                 <!-- Right: Touch Action Cluster (Shoot, Jump, Crouch, Reload Quiz) -->
-                <div class="flex flex-col items-end gap-2">
+                <div class="flex flex-col items-end gap-1.5">
                     <!-- Top mini-row: Ammo Counter + Reload Quiz + Crouch -->
-                    <div class="flex items-center gap-2">
-                        <button id="mob-reload" class="h-11 px-3 rounded-2xl bg-amber-500/95 active:bg-amber-400 border-2 border-amber-200 text-slate-950 text-xs font-black shadow-lg">
+                    <div class="flex items-center gap-1.5">
+                        <button id="mob-reload" class="h-9 px-2.5 rounded-xl bg-amber-500/95 active:bg-amber-400 border border-amber-200 text-slate-950 text-[11px] font-black shadow-lg">
                             🧠 <span id="mob-ammo-label">50/50</span>
                         </button>
-                        <button id="mob-crouch" class="h-11 px-3 rounded-2xl bg-sky-600/90 active:bg-sky-500 border-2 border-sky-300 text-white text-xs font-black shadow-lg">
+                        <button id="mob-crouch" class="h-9 px-2.5 rounded-xl bg-sky-600/90 active:bg-sky-500 border border-sky-300 text-white text-[11px] font-black shadow-lg">
                             🦆 NUNDUK
                         </button>
                     </div>
                     <!-- Main bottom row: Jump + Big Fire Button -->
-                    <div class="flex items-center gap-2.5">
-                        <button id="mob-jump" class="w-14 h-14 rounded-full bg-emerald-500/90 active:bg-emerald-400 border-2 border-emerald-200 text-slate-950 text-xs font-black shadow-xl">
+                    <div class="flex items-center gap-2">
+                        <button id="mob-jump" class="w-12 h-12 rounded-full bg-emerald-500/90 active:bg-emerald-400 border-2 border-emerald-200 text-slate-950 text-[10px] font-black shadow-xl">
                             ⬆ LOMPAT
                         </button>
-                        <button id="mob-fire" class="w-20 h-20 rounded-full bg-gradient-to-br from-rose-500 to-red-600 active:scale-95 border-4 border-rose-200 text-white text-sm font-black shadow-2xl flex flex-col items-center justify-center leading-tight">
-                            <span class="text-xl">🎯</span>
-                            <span>TEMBAK</span>
+                        <button id="mob-fire" class="w-16 h-16 rounded-full bg-gradient-to-br from-rose-500 to-red-600 active:scale-95 border-3 border-rose-200 text-white text-xs font-black shadow-2xl flex flex-col items-center justify-center leading-tight">
+                            <span class="text-base">🎯</span>
+                            <span class="text-[10px]">TEMBAK</span>
                         </button>
                     </div>
                 </div>
