@@ -201,7 +201,10 @@
                         <div class="bg-slate-950/90 border border-slate-700/80 rounded-xl p-2.5 space-y-1.5">
                             <div class="flex items-center justify-between">
                                 <span class="text-[11px] font-extrabold uppercase tracking-wider text-indigo-300">👥 Daftar Pemain di Ruang Tunggu</span>
-                                <span id="room-role-badge" class="text-[10px] font-black px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">👑 ADMIN / HOST</span>
+                                <div class="flex items-center gap-1.5">
+                                    <span id="cloud-sync-badge" class="text-[9px] font-extrabold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">⏳ CLOUD...</span>
+                                    <span id="room-role-badge" class="text-[10px] font-black px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-300 border border-yellow-500/40">👑 ADMIN / HOST</span>
+                                </div>
                             </div>
                             <div id="waiting-room-list" class="space-y-1 max-h-32 overflow-y-auto pr-1">
                                 <!-- Filled dynamically -->
@@ -486,7 +489,11 @@
         </div>
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
         // ==========================================
         // 1. WEB AUDIO SYNTHESIZER (NO EXTERNAL URLS)
         // ==========================================
@@ -1677,6 +1684,7 @@
                     pos: [playerMesh.position.x, playerMesh.position.y, playerMesh.position.z],
                     yaw: state.yaw
                 });
+                pushCloudPlayerState(true);
             }
         }
 
@@ -1768,14 +1776,15 @@
         }
 
         // ==========================================
-        // 11. RESPAWN & 3-MINUTE SESSION END / MVP
+        // 11. PLAYER DOWN, RESPAWN & END-OF-SESSION MVP
         // ==========================================
         function triggerPlayerDown() {
-            if (state.isRespawning || !state.isPlaying) return;
+            if (state.isRespawning) return;
             state.isRespawning = true;
+            state.isCrouching = false;
+            currentColliderH = PLAYER_STAND_H;
             state.respawnTimer = 3.0;
             state.deaths++;
-            state.isCrouching = false;
             recordDeathStat('player_self', state.nickname, 'player');
             updateHUD();
 
@@ -1784,11 +1793,11 @@
                 document.getElementById('quiz-modal').classList.add('hidden');
             }
             hideManualReloadPrompt();
+            if (document.pointerLockElement) document.exitPointerLock();
 
             playerMesh.visible = false;
             document.getElementById('respawn-countdown').textContent = '3';
             document.getElementById('respawn-overlay').classList.remove('hidden');
-            showToast('💀 Kamu tumbang! Hidup kembali dalam 3 detik...');
         }
 
         function completePlayerRespawn() {
@@ -1798,98 +1807,352 @@
             state.invulnTimer = 2.5;
             state.velocity.set(0, 0, 0);
 
-            const safePos = findSafeSpawnPos((Math.random() - 0.5) * 28, (Math.random() - 0.5) * 28, 1.0);
+            const safePos = findSafeSpawnPos((Math.random() - 0.5) * 24, (Math.random() - 0.5) * 24, 1.2);
             playerMesh.position.copy(safePos);
             playerMesh.visible = true;
 
             document.getElementById('respawn-overlay').classList.add('hidden');
-            sfx.respawn();
+            hideManualReloadPrompt();
             updateHUD();
-            showToast('✨ Kamu hidup kembali dengan 50 peluru penuh!');
+            sfx.respawn();
+            showToast('⚡ Hidup kembali! Perisai kebal aktif 2,5 detik.');
+
+            if (state.isPlaying && !state.isQuizOpen && canvas.requestPointerLock) {
+                canvas.requestPointerLock();
+            }
         }
 
         function endSessionAndShowMVP() {
             state.isPlaying = false;
             state.isQuizOpen = false;
             state.isRespawning = false;
+            state.isCrouching = false;
             hideManualReloadPrompt();
-
-            document.getElementById('quiz-modal').classList.add('hidden');
-            document.getElementById('respawn-overlay').classList.add('hidden');
-            document.getElementById('hud-screen').classList.add('hidden');
-            document.getElementById('crosshair').classList.add('hidden');
             if (document.pointerLockElement) document.exitPointerLock();
 
             sfx.sessionEnd();
 
-            remotePeers.forEach((peer, peerId) => {
-                registerParticipant(peerId, peer.name, 'multi');
-                const p = sessionParticipants.get(peerId);
-                p.kills = Math.max(p.kills, peer.kills || 0);
-                p.deaths = Math.max(p.deaths, peer.deaths || 0);
-                p.score = Math.max(p.score, peer.score || 0);
-            });
+            document.getElementById('hud-screen').classList.add('hidden');
+            document.getElementById('quiz-modal').classList.add('hidden');
+            document.getElementById('respawn-overlay').classList.add('hidden');
+            document.getElementById('crosshair').classList.add('hidden');
 
-            const list = Array.from(sessionParticipants.values());
-            if (list.length === 0) {
-                list.push({ id: 'player_self', name: state.nickname, type: 'player', kills: state.kills, deaths: state.deaths, score: state.score });
+            const participants = Array.from(sessionParticipants.values());
+            if (participants.length === 0) {
+                participants.push({
+                    id: 'player_self',
+                    name: state.nickname,
+                    type: 'player',
+                    kills: state.kills,
+                    deaths: state.deaths,
+                    score: state.score
+                });
             }
 
-            const topKiller = [...list].sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths) || (b.score - a.score))[0];
-            const leastDeaths = [...list].sort((a, b) => (a.deaths - b.deaths) || (b.kills - a.kills) || (b.score - a.score))[0];
+            const topKiller = [...participants].sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths) || (b.score - a.score))[0];
+            const leastDeaths = [...participants].sort((a, b) => (a.deaths - b.deaths) || (b.kills - a.kills) || (b.score - a.score))[0];
 
-            const isUltimate = topKiller && leastDeaths && topKiller.id === leastDeaths.id;
-            const ultimateBanner = document.getElementById('ultimate-mvp-banner');
-            if (isUltimate) {
-                ultimateBanner.classList.remove('hidden');
-                document.getElementById('ultimate-mvp-name').textContent = topKiller.name;
-            } else {
-                ultimateBanner.classList.add('hidden');
-            }
-
-            document.getElementById('mvp-top-killer-name').textContent = topKiller.name;
-            document.getElementById('mvp-top-killer-stat').textContent = `${topKiller.kills} Eliminasi • ${topKiller.deaths} Mati`;
-
-            document.getElementById('mvp-least-deaths-name').textContent = leastDeaths.name;
-            document.getElementById('mvp-least-deaths-stat').textContent = `${leastDeaths.deaths} Mati • ${leastDeaths.kills} Eliminasi`;
-
-            const arenaLabels = { desert: 'Gurun Pasir', city: 'Kota Malam', moon: 'Pangkalan Bulan' };
+            const arenaLabels = { desert: 'Gurun Pasir', city: 'Kota Malam', moon: 'Bulan (Low Gravity)' };
             document.getElementById('mvp-arena-summary').textContent = `Arena: ${arenaLabels[state.arena]} • Gelombang Tercapai: Wave ${state.wave}`;
 
-            const ranked = [...list].sort((a, b) => (b.score - a.score) || (b.kills - a.kills) || (a.deaths - b.deaths));
+            document.getElementById('mvp-top-killer-name').textContent = `${topKiller.name}${topKiller.id === 'player_self' ? ' (Kamu)' : ''}`;
+            document.getElementById('mvp-top-killer-stat').textContent = `${topKiller.kills} Eliminasi • ${topKiller.deaths} Mati • ${topKiller.score} Skor`;
+
+            document.getElementById('mvp-least-deaths-name').textContent = `${leastDeaths.name}${leastDeaths.id === 'player_self' ? ' (Kamu)' : ''}`;
+            document.getElementById('mvp-least-deaths-stat').textContent = `${leastDeaths.deaths} Mati • ${leastDeaths.kills} Eliminasi • ${leastDeaths.score} Skor`;
+
+            const ultBanner = document.getElementById('ultimate-mvp-banner');
+            if (topKiller.id === leastDeaths.id) {
+                document.getElementById('ultimate-mvp-name').textContent = `${topKiller.name}${topKiller.id === 'player_self' ? ' (Kamu)' : ''}`;
+                ultBanner.classList.remove('hidden');
+            } else {
+                ultBanner.classList.add('hidden');
+            }
+
+            const ranked = [...participants].sort((a, b) => (b.score - a.score) || (b.kills - a.kills) || (a.deaths - b.deaths));
             const tbody = document.getElementById('mvp-table-body');
-            tbody.innerHTML = ranked.map((p, idx) => {
+            tbody.innerHTML = '';
+
+            ranked.forEach((p, idx) => {
+                const isSelf = p.id === 'player_self';
                 const badges = [];
                 if (p.id === topKiller.id) badges.push('<span class="bg-rose-500/25 border border-rose-400 text-rose-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full">🔥 Top Killer</span>');
-                if (p.id === leastDeaths.id) badges.push('<span class="bg-emerald-500/25 border border-emerald-400 text-emerald-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full">🛡️ Survivor</span>');
-                const badgeHtml = badges.length > 0 ? badges.join(' ') : '<span class="text-slate-500 text-[11px]">Peserta</span>';
+                if (p.id === leastDeaths.id) badges.push('<span class="bg-emerald-500/25 border border-emerald-400 text-emerald-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full">🛡️ Mati Paling Dikit</span>');
 
-                const roleTag = p.type === 'player'
-                    ? '<span class="text-[10px] bg-yellow-400 text-slate-950 font-black px-1.5 py-0.5 rounded ml-1">KAMU</span>'
-                    : (p.type === 'bot' ? '<span class="text-[10px] bg-sky-500/30 text-sky-300 font-bold px-1.5 py-0.5 rounded ml-1">BOT</span>' : '<span class="text-[10px] bg-indigo-500/30 text-indigo-300 font-bold px-1.5 py-0.5 rounded ml-1">TEMAN</span>');
-
-                return `
-                    <tr class="${p.type === 'player' ? 'bg-yellow-500/10' : ''}">
-                        <td class="py-2.5 px-3 font-black text-slate-300">#${idx + 1}</td>
-                        <td class="py-2.5 px-3 font-bold text-white">${p.name} ${roleTag}</td>
-                        <td class="py-2.5 px-3">${badgeHtml}</td>
-                        <td class="py-2.5 px-3 text-center font-extrabold text-rose-300">${p.kills}</td>
-                        <td class="py-2.5 px-3 text-center font-extrabold text-emerald-300">${p.deaths}</td>
-                        <td class="py-2.5 px-3 text-right font-black text-yellow-300">${p.score}</td>
-                    </tr>
+                const roleTag = p.type === 'bot' ? '🤖 ' : (p.type === 'multi' ? '🌐 ' : '⭐ ');
+                const tr = document.createElement('tr');
+                tr.className = isSelf ? 'bg-yellow-500/10 font-bold text-white' : 'text-slate-200';
+                tr.innerHTML = `
+                    <td class="py-2.5 px-3 font-black text-amber-300">#${idx + 1}</td>
+                    <td class="py-2.5 px-3">${roleTag}${p.name}${isSelf ? ' <span class="text-yellow-300 text-[11px]">(Kamu)</span>' : ''}</td>
+                    <td class="py-2.5 px-3 flex flex-wrap gap-1">${badges.join('') || '<span class="text-slate-500 text-xs">-</span>'}</td>
+                    <td class="py-2.5 px-3 text-center font-bold text-emerald-400">${p.kills}</td>
+                    <td class="py-2.5 px-3 text-center font-bold text-rose-400">${p.deaths}</td>
+                    <td class="py-2.5 px-3 text-right font-black text-yellow-300">${p.score}</td>
                 `;
-            }).join('');
+                tbody.appendChild(tr);
+            });
 
             document.getElementById('mvp-modal').classList.remove('hidden');
         }
 
         // ==========================================
-        // 12. MULTIPLAYER WAITING ROOM & SYNC ENGINE
+        // 12. MULTIPLAYER WAITING ROOM & CLOUD ONLINE SYNC
         //     (MAX 9 FRIENDS BESIDES ADMIN = 10 TOTAL)
         // ==========================================
         const myPeerId = 'peer_' + Math.random().toString(36).slice(2, 9);
-        const roomChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('blox_zombie_room_v5') : null;
+        const roomChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('blox_zombie_room_v6') : null;
         const waitingRoomMembers = new Map();
+
+        // Cloud Firestore Multiplayer Setup
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'blox-zombie-arena-default';
+        let cloudDb = null;
+        let cloudAuth = null;
+        let cloudUser = null;
+        let cloudReady = false;
+        let unsubRoomSnapshot = null;
+        let lastCloudShootTs = 0;
+        let lastCloudPushTs = 0;
+
+        function setCloudBadge(text, isOnline) {
+            const b = document.getElementById('cloud-sync-badge');
+            if (!b) return;
+            b.textContent = text;
+            b.className = isOnline
+                ? 'text-[9px] font-extrabold px-2 py-0.5 rounded bg-emerald-500/25 text-emerald-300 border border-emerald-400/50'
+                : 'text-[9px] font-extrabold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40';
+        }
+
+        async function initCloudMultiplayer() {
+            try {
+                if (typeof __firebase_config === 'undefined') {
+                    setCloudBadge('⚠️ LOKAL TAB', false);
+                    return;
+                }
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                cloudAuth = getAuth(app);
+                cloudDb = getFirestore(app);
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    const cred = await signInWithCustomToken(cloudAuth, __initial_auth_token);
+                    cloudUser = cred.user;
+                } else {
+                    const cred = await signInAnonymously(cloudAuth);
+                    cloudUser = cred.user;
+                }
+                cloudReady = !!cloudUser;
+                if (cloudReady) {
+                    setCloudBadge('🌐 ONLINE CLOUD', true);
+                    if (state.mode === 'multi') {
+                        subscribeToCloudRoom(state.roomCode, state.isRoomHost);
+                    }
+                }
+            } catch (err) {
+                console.warn('Cloud init fallback:', err);
+                setCloudBadge('⚠️ LOKAL TAB', false);
+            }
+        }
+
+        function getCloudRoomRef(code) {
+            return doc(cloudDb, 'artifacts', appId, 'public', 'data', 'rooms', code);
+        }
+
+        async function subscribeToCloudRoom(code, createIfMissing = false) {
+            if (!cloudReady || !cloudUser || !cloudDb || !code) return;
+            if (unsubRoomSnapshot) {
+                unsubRoomSnapshot();
+                unsubRoomSnapshot = null;
+            }
+
+            const roomRef = getCloudRoomRef(code);
+
+            try {
+                const snap = await getDoc(roomRef);
+                if (!snap.exists()) {
+                    if (createIfMissing) {
+                        await setDoc(roomRef, {
+                            roomCode: code,
+                            hostId: myPeerId,
+                            arena: state.arena,
+                            status: 'lobby',
+                            sessionSeed: Date.now(),
+                            members: {
+                                [myPeerId]: {
+                                    id: myPeerId,
+                                    name: state.nickname,
+                                    isHost: true,
+                                    isSimulated: false,
+                                    colorIdx: 0,
+                                    joinedAt: Date.now()
+                                }
+                            },
+                            players: {},
+                            updatedAt: serverTimestamp()
+                        });
+                    } else {
+                        showToast(`⚠️ Room ${code} belum ditemukan di server, pastikan kode benar!`);
+                    }
+                } else {
+                    const data = snap.data();
+                    const membersObj = data.members || {};
+                    const memberCount = Object.keys(membersObj).length;
+                    if (!membersObj[myPeerId] && memberCount >= MAX_MULTI_PLAYERS) {
+                        showToast(`🔒 Room ${code} sudah penuh (maksimal 9 teman selain Admin)!`);
+                        state.isRoomHost = true;
+                        state.roomCode = 'ZMB' + Math.floor(100 + Math.random() * 900);
+                        document.getElementById('lobby-room-code').textContent = state.roomCode;
+                        waitingRoomMembers.clear();
+                        syncSelfInWaitingRoom();
+                        subscribeToCloudRoom(state.roomCode, true);
+                        return;
+                    }
+
+                    // Register self into room members map
+                    const nextColorIdx = membersObj[myPeerId]?.colorIdx ?? (memberCount % PEER_COLORS.length);
+                    await updateDoc(roomRef, {
+                        [`members.${myPeerId}`]: {
+                            id: myPeerId,
+                            name: state.nickname,
+                            isHost: state.isRoomHost,
+                            isSimulated: false,
+                            colorIdx: nextColorIdx,
+                            joinedAt: Date.now()
+                        },
+                        updatedAt: serverTimestamp()
+                    });
+                }
+            } catch (err) {
+                console.warn('Cloud room join/create error:', err);
+            }
+
+            unsubRoomSnapshot = onSnapshot(roomRef, (docSnap) => {
+                if (!docSnap.exists()) return;
+                const data = docSnap.data();
+                if (data.roomCode !== state.roomCode) return;
+
+                // 1. Sync Waiting Room Members from Cloud
+                const membersObj = data.members || {};
+                const kickedIds = data.kicked || {};
+                if (kickedIds[myPeerId] && !state.isRoomHost) {
+                    showToast('Kamu dikeluarkan dari room oleh Admin.');
+                    state.isRoomHost = true;
+                    state.roomCode = 'ZMB' + Math.floor(100 + Math.random() * 900);
+                    document.getElementById('lobby-room-code').textContent = state.roomCode;
+                    waitingRoomMembers.clear();
+                    syncSelfInWaitingRoom();
+                    subscribeToCloudRoom(state.roomCode, true);
+                    return;
+                }
+
+                // Keep local simulated friends + merge all cloud members
+                const simMembers = new Map();
+                waitingRoomMembers.forEach((v, k) => {
+                    if (v.isSimulated) simMembers.set(k, v);
+                });
+                waitingRoomMembers.clear();
+
+                const entries = Object.values(membersObj).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+                entries.forEach((m, idx) => {
+                    waitingRoomMembers.set(m.id, {
+                        id: m.id,
+                        name: m.name || 'TemanBlox',
+                        isHost: !!m.isHost,
+                        isSimulated: false,
+                        colorIdx: typeof m.colorIdx === 'number' ? m.colorIdx : (idx % PEER_COLORS.length),
+                        lastSeen: Date.now()
+                    });
+                });
+                simMembers.forEach((v, k) => {
+                    if (waitingRoomMembers.size < MAX_MULTI_PLAYERS) {
+                        waitingRoomMembers.set(k, v);
+                    }
+                });
+
+                // Ensure self is always listed
+                if (!waitingRoomMembers.has(myPeerId)) {
+                    waitingRoomMembers.set(myPeerId, {
+                        id: myPeerId,
+                        name: state.nickname,
+                        isHost: state.isRoomHost,
+                        isSimulated: false,
+                        colorIdx: 0,
+                        lastSeen: Date.now()
+                    });
+                }
+
+                // 2. Sync Arena Selection from Host
+                if (!state.isRoomHost && data.arena && data.arena !== state.arena) {
+                    selectArenaCard(data.arena, false);
+                }
+
+                renderWaitingRoomUI();
+
+                // 3. Auto-Start Match when Admin starts session in Cloud
+                if (data.status === 'playing' && !state.isPlaying && state.mode === 'multi' && !state.isRoomHost) {
+                    if (data.arena) selectArenaCard(data.arena, false);
+                    showToast(`🚀 Admin memulai sesi di arena ${data.arena.toUpperCase()}!`);
+                    startGameSession(true);
+                }
+
+                // 4. Live In-Game Player Position & Shoot Sync from Cloud
+                if (state.isPlaying && state.mode === 'multi' && data.players) {
+                    Object.entries(data.players).forEach(([pid, pData]) => {
+                        if (pid === myPeerId || !pData || !Array.isArray(pData.pos)) return;
+                        spawnOrUpdateRemotePeer({
+                            peerId: pid,
+                            nickname: pData.nickname || 'Teman',
+                            pos: pData.pos,
+                            yaw: pData.yaw || 0,
+                            hp: pData.hp ?? 100,
+                            isCrouching: !!pData.isCrouching,
+                            kills: pData.kills || 0,
+                            deaths: pData.deaths || 0,
+                            score: pData.score || 0
+                        });
+
+                        if (pData.lastShootTs && pData.lastShootTs > lastCloudShootTs && Date.now() - pData.lastShootTs < 1500) {
+                            lastCloudShootTs = pData.lastShootTs;
+                            const start = new THREE.Vector3(pData.pos[0], pData.pos[1] + 1.6, pData.pos[2]);
+                            const dir = new THREE.Vector3(-Math.sin(pData.yaw || 0), 0, -Math.cos(pData.yaw || 0));
+                            createLaserTracer(start, start.clone().add(dir.multiplyScalar(32)), 0xfacc15);
+                        }
+                    });
+                }
+            }, (err) => {
+                console.warn('Cloud snapshot error:', err);
+            });
+        }
+
+        async function pushCloudPlayerState(didShoot = false) {
+            if (!cloudReady || !cloudUser || !cloudDb || state.mode !== 'multi' || !playerMesh) return;
+            const now = Date.now();
+            if (!didShoot && now - lastCloudPushTs < 140) return;
+            lastCloudPushTs = now;
+
+            try {
+                const roomRef = getCloudRoomRef(state.roomCode);
+                const payload = {
+                    [`players.${myPeerId}`]: {
+                        nickname: state.nickname,
+                        pos: [
+                            Number(playerMesh.position.x.toFixed(2)),
+                            Number(playerMesh.position.y.toFixed(2)),
+                            Number(playerMesh.position.z.toFixed(2))
+                        ],
+                        yaw: Number(state.yaw.toFixed(3)),
+                        hp: state.hp,
+                        isCrouching: state.isCrouching,
+                        kills: state.kills,
+                        deaths: state.deaths,
+                        score: state.score,
+                        lastShootTs: didShoot ? now : 0,
+                        updatedAt: now
+                    }
+                };
+                await updateDoc(roomRef, payload);
+            } catch (e) {}
+        }
 
         function syncSelfInWaitingRoom() {
             const existing = waitingRoomMembers.get(myPeerId);
@@ -1902,77 +2165,14 @@
                 lastSeen: Date.now()
             });
             renderWaitingRoomUI();
-        }
 
-        function handleIncomingRoomMessage(msg) {
-            if (!msg || msg.peerId === myPeerId) return;
-            if (msg.roomCode !== state.roomCode) return;
-
-            if (msg.type === 'lobby_join' || msg.type === 'lobby_ping') {
-                const isNew = !waitingRoomMembers.has(msg.peerId);
-                if (isNew && waitingRoomMembers.size >= MAX_MULTI_PLAYERS) {
-                    return; // Max 9 friends besides Admin (10 total)
-                }
-                const existing = waitingRoomMembers.get(msg.peerId);
-                const cIdx = existing ? existing.colorIdx : (waitingRoomMembers.size % PEER_COLORS.length);
-                waitingRoomMembers.set(msg.peerId, {
-                    id: msg.peerId,
-                    name: msg.nickname || 'TemanBlox',
-                    isHost: !!msg.isHost,
-                    isSimulated: false,
-                    colorIdx: cIdx,
-                    lastSeen: Date.now()
-                });
-                renderWaitingRoomUI();
-
-                if (msg.type === 'lobby_join') {
-                    broadcastRoomMessage({
-                        type: 'lobby_ping',
-                        peerId: myPeerId,
-                        roomCode: state.roomCode,
-                        nickname: state.nickname,
-                        isHost: state.isRoomHost,
-                        arena: state.arena
-                    });
-                }
-            } else if (msg.type === 'lobby_arena' && !state.isRoomHost) {
-                if (msg.arena && msg.arena !== state.arena) {
-                    selectArenaCard(msg.arena, false);
-                }
-            } else if (msg.type === 'lobby_kick' && msg.targetPeerId === myPeerId) {
-                showToast('Kamu dikeluarkan dari room oleh Admin.');
-                state.isRoomHost = true;
-                state.roomCode = 'ZMB' + Math.floor(100 + Math.random() * 900);
-                document.getElementById('lobby-room-code').textContent = state.roomCode;
-                waitingRoomMembers.clear();
-                syncSelfInWaitingRoom();
-            } else if (msg.type === 'host_start') {
-                if (!state.isPlaying && state.mode === 'multi') {
-                    if (msg.arena) selectArenaCard(msg.arena, false);
-                    if (Array.isArray(msg.members)) {
-                        msg.members.forEach((m, idx) => {
-                            waitingRoomMembers.set(m.id, {
-                                id: m.id,
-                                name: m.name,
-                                isHost: !!m.isHost,
-                                isSimulated: !!m.isSimulated,
-                                colorIdx: idx % PEER_COLORS.length,
-                                lastSeen: Date.now()
-                            });
-                        });
-                    }
-                    showToast(`🚀 Admin memulai sesi di arena ${msg.arena.toUpperCase()}!`);
-                    startGameSession(true);
-                }
-            } else if (msg.type === 'state' && state.isPlaying && state.mode === 'multi') {
-                spawnOrUpdateRemotePeer(msg);
-            } else if (msg.type === 'shoot' && state.isPlaying && state.mode === 'multi') {
-                const peer = remotePeers.get(msg.peerId);
-                if (peer) {
-                    const start = new THREE.Vector3(msg.pos[0], msg.pos[1] + 1.6, msg.pos[2]);
-                    const dir = new THREE.Vector3(-Math.sin(msg.yaw), 0, -Math.cos(msg.yaw));
-                    createLaserTracer(start, start.clone().add(dir.multiplyScalar(32)), 0xfacc15);
-                }
+            if (cloudReady && cloudUser && cloudDb && state.mode === 'multi') {
+                const roomRef = getCloudRoomRef(state.roomCode);
+                updateDoc(roomRef, {
+                    [`members.${myPeerId}.name`]: state.nickname,
+                    [`members.${myPeerId}.isHost`]: state.isRoomHost,
+                    [`members.${myPeerId}.joinedAt`]: Date.now()
+                }).catch(() => {});
             }
         }
 
@@ -2034,6 +2234,7 @@
 
         function removeWaitingRoomMember(memberId) {
             if (!state.isRoomHost || memberId === myPeerId) return;
+            const member = waitingRoomMembers.get(memberId);
             waitingRoomMembers.delete(memberId);
             broadcastRoomMessage({
                 type: 'lobby_kick',
@@ -2041,6 +2242,12 @@
                 roomCode: state.roomCode,
                 targetPeerId: memberId
             });
+            if (cloudReady && cloudUser && cloudDb && member && !member.isSimulated) {
+                const roomRef = getCloudRoomRef(state.roomCode);
+                updateDoc(roomRef, {
+                    [`kicked.${memberId}`]: true
+                }).catch(() => {});
+            }
             renderWaitingRoomUI();
         }
 
@@ -2171,6 +2378,76 @@
             }
         }
 
+        function handleIncomingRoomMessage(msg) {
+            if (!msg || msg.peerId === myPeerId) return;
+            if (msg.roomCode !== state.roomCode) return;
+
+            if (msg.type === 'lobby_join' || msg.type === 'lobby_ping') {
+                if (!waitingRoomMembers.has(msg.peerId) && waitingRoomMembers.size >= MAX_MULTI_PLAYERS) {
+                    if (state.isRoomHost) {
+                        broadcastRoomMessage({
+                            type: 'lobby_full',
+                            peerId: myPeerId,
+                            roomCode: state.roomCode,
+                            targetPeerId: msg.peerId
+                        });
+                    }
+                    return;
+                }
+                const cIdx = waitingRoomMembers.has(msg.peerId)
+                    ? waitingRoomMembers.get(msg.peerId).colorIdx
+                    : (waitingRoomMembers.size % PEER_COLORS.length);
+
+                waitingRoomMembers.set(msg.peerId, {
+                    id: msg.peerId,
+                    name: msg.nickname || 'TemanBlox',
+                    isHost: !!msg.isHost,
+                    isSimulated: false,
+                    colorIdx: cIdx,
+                    lastSeen: Date.now()
+                });
+                if (msg.isHost && msg.arena && !state.isRoomHost) {
+                    selectArenaCard(msg.arena, false);
+                }
+                renderWaitingRoomUI();
+            } else if (msg.type === 'lobby_full' && msg.targetPeerId === myPeerId) {
+                showToast(`🔒 Room ${state.roomCode} sudah penuh (maksimal ${MAX_FRIENDS_BESIDES_ADMIN} teman selain Admin)!`);
+                state.isRoomHost = true;
+                state.roomCode = 'ZMB' + Math.floor(100 + Math.random() * 900);
+                document.getElementById('lobby-room-code').textContent = state.roomCode;
+                waitingRoomMembers.clear();
+                syncSelfInWaitingRoom();
+                subscribeToCloudRoom(state.roomCode, true);
+            } else if (msg.type === 'lobby_arena' && !state.isRoomHost) {
+                selectArenaCard(msg.arena, false);
+            } else if (msg.type === 'lobby_kick' && msg.targetPeerId === myPeerId) {
+                showToast('Kamu dikeluarkan dari room oleh Admin.');
+                state.isRoomHost = true;
+                state.roomCode = 'ZMB' + Math.floor(100 + Math.random() * 900);
+                document.getElementById('lobby-room-code').textContent = state.roomCode;
+                waitingRoomMembers.clear();
+                syncSelfInWaitingRoom();
+                subscribeToCloudRoom(state.roomCode, true);
+            } else if (msg.type === 'host_start' && !state.isRoomHost && !state.isPlaying && state.mode === 'multi') {
+                if (Array.isArray(msg.members)) {
+                    waitingRoomMembers.clear();
+                    msg.members.slice(0, MAX_MULTI_PLAYERS).forEach((m, i) => {
+                        waitingRoomMembers.set(m.id, { ...m, colorIdx: i % PEER_COLORS.length });
+                    });
+                    syncSelfInWaitingRoom();
+                }
+                selectArenaCard(msg.arena || state.arena, false);
+                showToast('🚀 Admin telah memulai sesi! Masuk ke arena...');
+                startGameSession(true);
+            } else if (msg.type === 'state' && state.isPlaying) {
+                spawnOrUpdateRemotePeer(msg);
+            } else if (msg.type === 'shoot' && state.isPlaying) {
+                const start = new THREE.Vector3(msg.pos[0], msg.pos[1] + 1.6, msg.pos[2]);
+                const dir = new THREE.Vector3(-Math.sin(msg.yaw), 0, -Math.cos(msg.yaw));
+                createLaserTracer(start, start.clone().add(dir.multiplyScalar(32)), 0xfacc15);
+            }
+        }
+
         // ==========================================
         // 13. INPUT CONTROLS (WASD + SHIFT + C/CTRL CROUCH + SPACE + 1/R RELOAD)
         // ==========================================
@@ -2179,23 +2456,24 @@
         let isMouseDragging = false;
         let lastMouseX = 0, lastMouseY = 0;
 
-        function setCrouchState(desiredCrouch) {
+        function setCrouchState(wantCrouch) {
             if (!state.isPlaying || state.isQuizOpen || state.isRespawning) return;
+            if (wantCrouch === state.isCrouching) return;
 
-            if (desiredCrouch && !state.isCrouching) {
+            if (wantCrouch) {
                 state.isCrouching = true;
                 currentColliderH = PLAYER_CROUCH_H;
                 sfx.crouch();
-                updateStanceHUD();
-            } else if (!desiredCrouch && state.isCrouching) {
+            } else {
                 if (canStandAtHeight(playerMesh.position.x, playerMesh.position.y, playerMesh.position.z, PLAYER_HALF_W, PLAYER_STAND_H)) {
                     state.isCrouching = false;
                     currentColliderH = PLAYER_STAND_H;
-                    updateStanceHUD();
+                    sfx.crouch();
                 } else {
-                    showToast('⚠️ Atap terlalu rendah untuk berdiri!');
+                    showToast('Atap terlalu rendah untuk berdiri! Keluar dari celah dulu.');
                 }
             }
+            updateStanceHUD();
         }
 
         window.addEventListener('keydown', (e) => {
@@ -2682,8 +2960,7 @@
                     spawnWaveEnemies(state.wave);
                 }
             }
-
-            // --- 7. MULTIPLAYER BROADCAST ---
+            // --- 7. MULTIPLAYER BROADCAST (LOCAL + CLOUD ONLINE) ---
             if (state.mode === 'multi') {
                 syncTicker += dt;
                 if (syncTicker >= 0.08) {
@@ -2701,6 +2978,7 @@
                         deaths: state.deaths,
                         score: state.score
                     });
+                    pushCloudPlayerState(false);
                 }
             }
         }
@@ -2827,6 +3105,12 @@
                     roomCode: state.roomCode,
                     arena: state.arena
                 });
+                if (cloudReady && cloudUser && cloudDb) {
+                    updateDoc(getCloudRoomRef(state.roomCode), {
+                        arena: state.arena,
+                        updatedAt: serverTimestamp()
+                    }).catch(() => {});
+                }
             }
         }
 
@@ -2848,6 +3132,7 @@
             document.getElementById('panel-solo').classList.add('hidden');
 
             syncSelfInWaitingRoom();
+            subscribeToCloudRoom(state.roomCode, state.isRoomHost);
             broadcastRoomMessage({
                 type: 'lobby_join',
                 peerId: myPeerId,
@@ -2905,6 +3190,7 @@
             waitingRoomMembers.clear();
             document.getElementById('lobby-room-code').textContent = state.roomCode;
             syncSelfInWaitingRoom();
+            subscribeToCloudRoom(state.roomCode, true);
             showToast(`Room baru ${state.roomCode} dibuat! Kamu adalah Admin.`);
         });
 
@@ -2923,6 +3209,7 @@
             waitingRoomMembers.clear();
             document.getElementById('lobby-room-code').textContent = state.roomCode;
             syncSelfInWaitingRoom();
+            subscribeToCloudRoom(state.roomCode, false);
             broadcastRoomMessage({
                 type: 'lobby_join',
                 peerId: myPeerId,
@@ -2963,6 +3250,13 @@
                     arena: state.arena,
                     members: Array.from(waitingRoomMembers.values())
                 });
+                if (cloudReady && cloudUser && cloudDb) {
+                    updateDoc(getCloudRoomRef(state.roomCode), {
+                        status: 'playing',
+                        arena: state.arena,
+                        startedAt: Date.now()
+                    }).catch(() => {});
+                }
             }
 
             state.hp = 100;
@@ -3027,18 +3321,24 @@
             document.getElementById('respawn-overlay').classList.add('hidden');
             document.getElementById('crosshair').classList.add('hidden');
             document.getElementById('lobby-screen').classList.remove('hidden');
-            if (state.mode === 'multi') renderWaitingRoomUI();
+            if (state.mode === 'multi') {
+                if (state.isRoomHost && cloudReady && cloudUser && cloudDb) {
+                    updateDoc(getCloudRoomRef(state.roomCode), { status: 'lobby' }).catch(() => {});
+                }
+                renderWaitingRoomUI();
+            }
         }
 
         document.getElementById('btn-exit-lobby').addEventListener('click', returnToLobby);
         document.getElementById('btn-back-lobby').addEventListener('click', returnToLobby);
 
         // ==========================================
-        // 16. INITIALIZE DEFAULT ARENA ON LOAD
+        // 16. INITIALIZE DEFAULT ARENA & CLOUD ON LOAD
         // ==========================================
         window.onload = function () {
             buildArena('desert');
             syncSelfInWaitingRoom();
+            initCloudMultiplayer();
             animate();
         };
     </script>
