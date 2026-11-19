@@ -1719,10 +1719,22 @@
 
         // PeerJS Online WebRTC P2P Multiplayer (Works directly on Vercel across devices!)
         const PEER_PREFIX = 'blox-zombie-arena-3d-v1-';
+        const RELAY_TOPIC_PREFIX = 'blox-zombie-arena-3d-room-v1-';
+        const PEER_RTC_CONFIG = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' }
+            ]
+        };
         let peerNode = null;
         const hostClientConns = new Map(); // For Admin/Host: peerId -> DataConnection
         let clientHostConn = null;          // For Joining Friend: DataConnection to Host
         let p2pReconnectTimer = null;
+        let relayPollTimer = null;
+        let lastRelayPollTs = Math.floor(Date.now() / 1000) - 5;
+        let activeRelayCode = '';
 
         function setCloudBadge(text, isOnline) {
             const b = document.getElementById('cloud-sync-badge');
@@ -1733,8 +1745,59 @@
                 : 'text-[9px] font-extrabold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40';
         }
 
+        function stopRelayPolling() {
+            clearInterval(relayPollTimer);
+            relayPollTimer = null;
+            activeRelayCode = '';
+        }
+
+        function publishRelayPacket(roomCode, packet) {
+            if (!roomCode) return;
+            const topic = RELAY_TOPIC_PREFIX + roomCode.toUpperCase();
+            fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
+                method: 'POST',
+                body: JSON.stringify(packet),
+                keepalive: true
+            }).catch(() => {});
+        }
+
+        function startRelayPolling(roomCode) {
+            stopRelayPolling();
+            if (!roomCode) return;
+            activeRelayCode = roomCode.toUpperCase();
+            const topic = RELAY_TOPIC_PREFIX + activeRelayCode;
+            lastRelayPollTs = Math.floor(Date.now() / 1000) - 3;
+
+            const pollOnce = async () => {
+                if (state.mode !== 'multi' || state.roomCode.toUpperCase() !== activeRelayCode) return;
+                try {
+                    const url = `https://ntfy.sh/${encodeURIComponent(topic)}/json?since=${lastRelayPollTs}&poll=1`;
+                    const res = await fetch(url, { cache: 'no-store' });
+                    if (!res.ok) return;
+                    const rawText = await res.text();
+                    const lines = rawText.trim().split('\n').filter(Boolean);
+                    for (const line of lines) {
+                        let envelope = null;
+                        try { envelope = JSON.parse(line); } catch (e) { continue; }
+                        if (!envelope || envelope.event !== 'message' || !envelope.message) continue;
+                        if (typeof envelope.time === 'number' && envelope.time > lastRelayPollTs) {
+                            lastRelayPollTs = envelope.time;
+                        }
+                        let pkt = null;
+                        try { pkt = JSON.parse(envelope.message); } catch (e) { continue; }
+                        if (!pkt || pkt.peerId === myPeerId) continue;
+                        handleIncomingRoomMessage(pkt);
+                    }
+                } catch (e) {}
+            };
+
+            pollOnce();
+            relayPollTimer = setInterval(pollOnce, 1400);
+        }
+
         function cleanupPeerNode() {
             clearTimeout(p2pReconnectTimer);
+            stopRelayPolling();
             hostClientConns.forEach(c => { try { c.close(); } catch (e) {} });
             hostClientConns.clear();
             if (clientHostConn) {
@@ -1762,28 +1825,30 @@
         function broadcastLobbyRosterFromHost() {
             if (!state.isRoomHost) return;
             const membersArr = Array.from(waitingRoomMembers.values());
-            sendP2PPacket({
+            const pkt = {
                 type: 'lobby_roster',
                 peerId: myPeerId,
                 roomCode: state.roomCode,
                 arena: state.arena,
                 members: membersArr
-            });
+            };
+            sendP2PPacket(pkt);
+            publishRelayPacket(state.roomCode, pkt);
         }
 
         function setupOnlinePeerRoom(code, asHost) {
             cleanupPeerNode();
+            startRelayPolling(code);
+            setCloudBadge('🌐 ONLINE RELAY + P2P', true);
+
             if (typeof Peer === 'undefined') {
-                setCloudBadge('⚠️ LOKAL TAB', false);
                 return;
             }
-
-            setCloudBadge('⏳ KONEKSI P2P...', false);
 
             if (asHost) {
                 // Admin claims deterministic Peer ID based on Room Code (e.g., blox-zombie-arena-3d-v1-ZMB189)
                 const hostPeerId = PEER_PREFIX + code.toUpperCase();
-                peerNode = new Peer(hostPeerId, { debug: 0 });
+                peerNode = new Peer(hostPeerId, { debug: 0, config: PEER_RTC_CONFIG });
 
                 peerNode.on('open', () => {
                     setCloudBadge('🌐 ONLINE P2P', true);
@@ -1791,7 +1856,7 @@
 
                 peerNode.on('connection', (conn) => {
                     conn.on('open', () => {
-                        // Send current lobby roster & arena immediately upon friend connection
+                        setCloudBadge('🌐 ONLINE P2P', true);
                         conn.send({
                             type: 'lobby_roster',
                             peerId: myPeerId,
@@ -1808,7 +1873,6 @@
                         }
                         handleIncomingRoomMessage(data);
 
-                        // Relay member join/state/shoot to all other connected friends
                         if (data.type === 'lobby_join' || data.type === 'lobby_ping') {
                             broadcastLobbyRosterFromHost();
                         } else if (data.type === 'state' || data.type === 'shoot') {
@@ -1835,19 +1899,16 @@
 
                 peerNode.on('error', (err) => {
                     if (err && err.type === 'unavailable-id') {
-                        // Room code already taken online, generate a fresh unique one
                         state.roomCode = 'ZMB' + Math.floor(100 + Math.random() * 900);
                         document.getElementById('lobby-room-code').textContent = state.roomCode;
                         waitingRoomMembers.clear();
                         syncSelfInWaitingRoom();
                         setupOnlinePeerRoom(state.roomCode, true);
-                    } else {
-                        setCloudBadge('⚠️ RETRY P2P', false);
                     }
                 });
             } else {
-                // Friend connects directly to Host's Room Code Peer ID
-                peerNode = new Peer({ debug: 0 });
+                // Friend connects directly to Host's Room Code Peer ID + Relay channel
+                peerNode = new Peer({ debug: 0, config: PEER_RTC_CONFIG });
 
                 peerNode.on('open', () => {
                     const targetHostId = PEER_PREFIX + code.toUpperCase();
@@ -1872,22 +1933,12 @@
                     });
 
                     conn.on('close', () => {
-                        setCloudBadge('⚠️ TERPUTUS', false);
-                        showToast(`Koneksi ke Admin Room ${state.roomCode} terputus.`);
-                    });
-
-                    conn.on('error', () => {
-                        setCloudBadge('⚠️ GAGAL KONEK', false);
+                        setCloudBadge('🌐 ONLINE RELAY', true);
                     });
                 });
 
-                peerNode.on('error', (err) => {
-                    if (err && err.type === 'peer-unavailable') {
-                        setCloudBadge('❌ ROOM TDK ADA', false);
-                        showToast(`❌ Room ${code} tidak ditemukan! Pastikan Admin sudah buka tab Multiplayer Room.`);
-                    } else {
-                        setCloudBadge('⚠️ ERROR P2P', false);
-                    }
+                peerNode.on('error', () => {
+                    setCloudBadge('🌐 ONLINE RELAY', true);
                 });
             }
         }
@@ -2153,6 +2204,9 @@
         function broadcastRoomMessage(payload) {
             const packet = { ...payload, ts: Date.now() };
             sendP2PPacket(packet);
+            if (state.mode === 'multi') {
+                publishRelayPacket(state.roomCode, packet);
+            }
             if (roomChannel) roomChannel.postMessage(packet);
             try {
                 localStorage.setItem('blox_zombie_sync_pkt', JSON.stringify(packet));
