@@ -1575,8 +1575,8 @@
         }
 
         function spawnWaveEnemies(waveNum) {
-            const baseCount = 6 + waveNum * 3;
-            const totalToSpawn = Math.min(24, baseCount);
+            const baseCount = 3 + Math.ceil(waveNum * 1.3);
+            const totalToSpawn = Math.min(10, baseCount);
             const anchor = playerMesh ? playerMesh.position : new THREE.Vector3(0, 0, 0);
 
             for (let i = 0; i < totalToSpawn; i++) {
