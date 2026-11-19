@@ -87,12 +87,17 @@
             }
             #mobile-joystick-base { width: 92px !important; height: 92px !important; }
             #mobile-joystick-knob { width: 38px !important; height: 38px !important; margin-top: -19px !important; margin-left: -19px !important; }
+            /* Keep mobile touch buttons comfortably inward from screen edges */
+            #mobile-controls {
+                padding: 0 14px 18px 12px !important;
+            }
         }
         /* Extra compact lobby & HUD when phone is rotated to landscape */
         @media (max-height: 520px) and (pointer: coarse) {
             #lobby-screen { align-items: flex-start !important; padding: 8px !important; }
             #lobby-card { padding: 12px !important; }
             #hud-screen { padding: 4px 8px !important; }
+            #mobile-controls { padding: 0 18px 10px 14px !important; }
             #mobile-joystick-base { width: 84px !important; height: 84px !important; }
             #mobile-joystick-knob { width: 34px !important; height: 34px !important; margin-top: -17px !important; margin-left: -17px !important; }
         }
@@ -464,34 +469,35 @@
         <!-- Bottom Bar: Weapon, Ammo (50/50) & Manual Quiz Trigger -->
         <div class="flex items-end justify-between gap-2 w-full">
             <!-- Mobile Virtual Joystick & Action Controls (Touch Devices / Small Screens) -->
-            <div id="mobile-controls" class="pointer-events-auto flex md:hidden items-end justify-between w-full gap-2 pb-0.5">
+            <div id="mobile-controls" class="pointer-events-auto flex md:hidden items-end justify-between w-full gap-3 px-3 pb-4">
                 <!-- Left: 360° Virtual Analog Stick (Move + Auto-Sprint at outer edge) -->
-                <div class="flex flex-col items-center gap-0.5">
+                <div class="flex flex-col items-center gap-1 mb-1">
                     <div id="mobile-joystick-base">
                         <div id="mobile-joystick-knob"></div>
                     </div>
-                    <span class="text-[8px] font-extrabold text-slate-300 bg-slate-950/70 px-1.5 py-0.5 rounded-full">JALAN / LARI</span>
+                    <span class="text-[9px] font-extrabold text-slate-300 bg-slate-950/75 px-2 py-0.5 rounded-full">JALAN / LARI</span>
                 </div>
 
-                <!-- Right: Touch Action Cluster (Shoot, Jump, Crouch, Reload Quiz) -->
-                <div class="flex flex-col items-end gap-1.5">
-                    <!-- Top mini-row: Ammo Counter + Reload Quiz + Crouch -->
-                    <div class="flex items-center gap-1.5">
-                        <button id="mob-reload" class="h-9 px-2.5 rounded-xl bg-amber-500/95 active:bg-amber-400 border border-amber-200 text-slate-950 text-[11px] font-black shadow-lg">
+                <!-- Right: Ergonomic Thumb-Zone Action Cluster (Inward from edge) -->
+                <div class="flex flex-col items-end gap-2.5 mr-1 mb-1">
+                    <!-- Top mini-row: Reload Quiz + Crouch -->
+                    <div class="flex items-center gap-2">
+                        <button id="mob-reload" class="h-10 px-3 rounded-xl bg-amber-500/95 active:bg-amber-400 border-2 border-amber-200 text-slate-950 text-xs font-black shadow-lg">
                             🧠 <span id="mob-ammo-label">50/50</span>
                         </button>
-                        <button id="mob-crouch" class="h-9 px-2.5 rounded-xl bg-sky-600/90 active:bg-sky-500 border border-sky-300 text-white text-[11px] font-black shadow-lg">
+                        <button id="mob-crouch" class="h-10 px-3 rounded-xl bg-sky-600/95 active:bg-sky-500 border-2 border-sky-300 text-white text-xs font-black shadow-lg">
                             🦆 NUNDUK
                         </button>
                     </div>
                     <!-- Main bottom row: Jump + Big Fire Button -->
-                    <div class="flex items-center gap-2">
-                        <button id="mob-jump" class="w-12 h-12 rounded-full bg-emerald-500/90 active:bg-emerald-400 border-2 border-emerald-200 text-slate-950 text-[10px] font-black shadow-xl">
-                            ⬆ LOMPAT
+                    <div class="flex items-center gap-3">
+                        <button id="mob-jump" class="w-14 h-14 rounded-full bg-emerald-500/95 active:bg-emerald-400 border-2 border-emerald-200 text-slate-950 text-[11px] font-black shadow-xl flex flex-col items-center justify-center leading-tight">
+                            <span>⬆</span>
+                            <span>LOMPAT</span>
                         </button>
-                        <button id="mob-fire" class="w-16 h-16 rounded-full bg-gradient-to-br from-rose-500 to-red-600 active:scale-95 border-3 border-rose-200 text-white text-xs font-black shadow-2xl flex flex-col items-center justify-center leading-tight">
-                            <span class="text-base">🎯</span>
-                            <span class="text-[10px]">TEMBAK</span>
+                        <button id="mob-fire" class="w-20 h-20 rounded-full bg-gradient-to-br from-rose-500 to-red-600 active:scale-95 border-4 border-rose-200 text-white text-xs font-black shadow-2xl flex flex-col items-center justify-center leading-tight">
+                            <span class="text-lg">🎯</span>
+                            <span class="text-[11px]">TEMBAK</span>
                         </button>
                     </div>
                 </div>
@@ -681,6 +687,8 @@
             sessionTimeLeft: SESSION_DURATION,
             respawnTimer: 0,
             invulnTimer: 0,
+            timeSinceLastHit: 0,
+            regenBuffer: 0,
             yaw: 0,
             pitch: 0.14,
             canJump: true,
@@ -1641,7 +1649,7 @@
 
                 const speed = kind === 'pink' ? 7.4 : (kind === 'brute' ? 4.8 : 6.1);
                 const maxHp = kind === 'brute' ? 120 : (kind === 'pink' ? 55 : 70);
-                const dmg = kind === 'brute' ? 18 : (kind === 'pink' ? 11 : 13);
+                const dmg = kind === 'brute' ? 12 : (kind === 'pink' ? 7 : 8);
                 const height = kind === 'brute' ? 4.5 : (kind === 'pink' ? 2.2 : 3.1);
 
                 enemies.push({
@@ -1819,6 +1827,8 @@
             state.hp = state.maxHp;
             state.ammo = MAX_AMMO;
             state.invulnTimer = 2.5;
+            state.timeSinceLastHit = 0;
+            state.regenBuffer = 0;
             state.velocity.set(0, 0, 0);
 
             const safe = findSafeSpawnPos((Math.random() - 0.5) * 32, (Math.random() - 0.5) * 32, PLAYER_HALF_W + 0.25);
@@ -3179,6 +3189,20 @@
 
             if (state.invulnTimer > 0) state.invulnTimer -= dt;
 
+            // --- 0A. AUTO HP REGENERATION WHEN SAFE ---
+            if (!state.isRespawning && !state.isQuizOpen && state.hp > 0 && state.hp < state.maxHp) {
+                state.timeSinceLastHit += dt;
+                if (state.timeSinceLastHit >= 4.0) {
+                    state.regenBuffer += dt * 4.0;
+                    if (state.regenBuffer >= 1) {
+                        const heal = Math.floor(state.regenBuffer);
+                        state.regenBuffer -= heal;
+                        state.hp = Math.min(state.maxHp, state.hp + heal);
+                        updateHUD();
+                    }
+                }
+            }
+
             // --- 0B. PLAYER RESPAWN TIMER ---
             if (state.isRespawning) {
                 state.respawnTimer -= dt;
@@ -3424,9 +3448,12 @@
 
                 e.attackCooldown -= dt;
                 if (dist <= 1.85 && e.attackCooldown <= 0) {
-                    e.attackCooldown = 1.05;
+                    e.attackCooldown = 1.25;
                     if (targetType === 'player' && !state.isRespawning && state.invulnTimer <= 0) {
                         state.hp = Math.max(0, state.hp - e.dmg);
+                        state.invulnTimer = 0.7; // Hit-stun grace period so multiple zombies don't instant-kill
+                        state.timeSinceLastHit = 0;
+                        state.regenBuffer = 0;
                         updateHUD();
                         sfx.zombieGroan();
 
@@ -3886,7 +3913,9 @@
             state.isCrouching = false;
             currentColliderH = PLAYER_STAND_H;
             state.respawnTimer = 0;
-            state.invulnTimer = 2.0;
+            state.invulnTimer = 2.5;
+            state.timeSinceLastHit = 0;
+            state.regenBuffer = 0;
             state.velocity.set(0, 0, 0);
 
             const arenaLabels = { desert: 'GURUN PASIR', city: 'KOTA MALAM', moon: 'BULAN (LOW GRAVITY)' };
