@@ -13,6 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700;800&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
     <style>
         * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
         body, html {
@@ -29,6 +30,19 @@
             padding-right: env(safe-area-inset-right);
             padding-top: env(safe-area-inset-top);
             padding-bottom: env(safe-area-inset-bottom);
+        }
+        /* Show mobile touch controls on any touch/coarse-pointer device (portrait or landscape) */
+        @media (pointer: coarse), (max-width: 767px) {
+            #mobile-controls { display: flex !important; }
+            #desktop-hud-hint, #desktop-ammo-box { display: none !important; }
+        }
+        /* Compact lobby & HUD when phone is rotated to landscape */
+        @media (max-height: 520px) and (pointer: coarse) {
+            #lobby-screen { align-items: flex-start !important; padding: 8px !important; }
+            #lobby-card { padding: 12px !important; }
+            #hud-screen { padding: 8px 12px !important; }
+            #mobile-joystick-base { width: 96px !important; height: 96px !important; }
+            #mobile-joystick-knob { width: 40px !important; height: 40px !important; margin-top: -20px !important; margin-left: -20px !important; }
         }
         input, button {
             touch-action: manipulation;
@@ -118,6 +132,14 @@
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
             pointer-events: none;
         }
+        @media (pointer: coarse) {
+            #mobile-controls { display: flex !important; }
+            #desktop-controls-hint, #desktop-ammo-box { display: none !important; }
+        }
+        @media (max-height: 460px) {
+            #lobby-screen { align-items: flex-start !important; padding-top: 0.5rem !important; }
+            #hud-screen { padding: 0.45rem !important; }
+        }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); border-radius: 99px; }
         ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.7); border-radius: 99px; }
@@ -142,25 +164,27 @@
     </div>
 
     <!-- ==================== MAIN LOBBY OVERLAY ==================== -->
-    <div id="lobby-screen" class="fixed inset-0 z-30 flex items-center justify-center p-3 sm:p-5 bg-gradient-to-b from-slate-950/85 via-slate-900/80 to-slate-950/90 overflow-y-auto">
-        <div class="roblox-card w-full max-w-4xl rounded-3xl p-4 sm:p-6 text-white space-y-4 my-auto">
+    <div id="lobby-screen" class="fixed inset-0 z-30 flex items-start sm:items-center justify-center p-2.5 sm:p-5 bg-gradient-to-b from-slate-950/85 via-slate-900/80 to-slate-950/90 overflow-y-auto">
+        <div id="lobby-card" class="roblox-card w-full max-w-4xl rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 text-white space-y-3 sm:space-y-4 my-auto">
             <!-- Header -->
-            <div class="flex flex-col sm:flex-row items-center justify-between gap-2 border-b border-slate-700/80 pb-3">
-                <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center text-2xl font-black shadow-lg border-2 border-white/30">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-2 border-b border-slate-700/80 pb-2.5 sm:pb-3">
+                <div class="flex items-center gap-2.5 sm:gap-3">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center text-xl sm:text-2xl font-black shadow-lg border-2 border-white/30 shrink-0">
                         🧱
                     </div>
                     <div>
-                        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-red-500">
+                        <h1 class="text-xl sm:text-3xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-red-500">
                             BLOX ZOMBIE ARENA 3D
                         </h1>
-                        <p class="text-xs text-slate-300">Sesi 3 Menit • Respawn • Nunduk [C] • Edu-Reload 50 Peluru • Maks 9 Teman + Admin</p>
+                        <p class="text-[11px] sm:text-xs text-slate-300">Sesi 3 Menit • Respawn • Nunduk [C] • Edu-Reload 50 Peluru</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-2 bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-600">
-                    <span class="text-xs text-slate-400">Nickname:</span>
-                    <input id="player-name-input" type="text" maxlength="14" value="BloxHunter" class="bg-transparent text-yellow-300 font-bold text-sm w-28 focus:outline-none border-b border-slate-600 focus:border-yellow-400">
-                    <button id="btn-lobby-fullscreen" type="button" class="ml-1 bg-slate-700 hover:bg-slate-600 active:bg-slate-500 text-white text-xs font-extrabold px-2.5 py-1 rounded-lg border border-slate-500 cursor-pointer" title="Layar Penuh">
+                <div class="flex items-center justify-between sm:justify-start w-full sm:w-auto gap-2 bg-slate-800/90 px-3 py-1.5 rounded-xl border border-slate-600">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-slate-400">Nickname:</span>
+                        <input id="player-name-input" type="text" maxlength="14" value="BloxHunter" class="bg-transparent text-yellow-300 font-bold text-sm w-28 focus:outline-none border-b border-slate-600 focus:border-yellow-400">
+                    </div>
+                    <button id="btn-lobby-fullscreen" type="button" class="ml-1 bg-slate-700 hover:bg-slate-600 active:bg-slate-500 text-white text-xs font-extrabold px-2.5 py-1 rounded-lg border border-slate-500 cursor-pointer shrink-0" title="Layar Penuh">
                         ⛶ Fullscreen
                     </button>
                 </div>
@@ -208,8 +232,11 @@
                                 <button id="btn-copy-code" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg cursor-pointer">
                                     Salin Kode
                                 </button>
+                                <button id="btn-copy-link" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg cursor-pointer" title="Salin link undangan otomatis masuk room">
+                                    🔗 Link Invite
+                                </button>
                                 <button id="btn-new-room" class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg cursor-pointer" title="Buat Room Baru sebagai Admin">
-                                    Buat Baru
+                                    Baru
                                 </button>
                             </div>
                         </div>
@@ -320,54 +347,54 @@
     </div>
 
     <!-- ==================== IN-GAME HUD ==================== -->
-    <div id="hud-screen" class="hidden fixed inset-0 z-20 pointer-events-none p-3 sm:p-5 flex flex-col justify-between">
+    <div id="hud-screen" class="hidden fixed inset-0 z-20 pointer-events-none p-2 sm:p-5 flex flex-col justify-between">
         <!-- Top Bar -->
-        <div class="flex items-start justify-between gap-2">
+        <div class="flex items-start justify-between gap-1.5 sm:gap-2">
             <!-- Left: Health & Stance & Squad -->
-            <div class="bg-slate-950/85 border-2 border-slate-700/90 rounded-2xl p-3 w-52 sm:w-64 backdrop-blur-md">
-                <div class="flex justify-between items-center text-xs font-extrabold text-white mb-1">
-                    <div class="flex items-center gap-1.5">
-                        <span id="hud-player-name" class="text-yellow-300 truncate max-w-[100px]">BloxHunter</span>
-                        <span id="hud-stance-badge" class="bg-slate-800 text-slate-300 text-[9px] px-1.5 py-0.5 rounded font-bold">BERDIRI</span>
+            <div class="bg-slate-950/85 border-2 border-slate-700/90 rounded-xl sm:rounded-2xl p-2 sm:p-3 w-36 sm:w-64 backdrop-blur-md">
+                <div class="flex justify-between items-center text-[10px] sm:text-xs font-extrabold text-white mb-1">
+                    <div class="flex items-center gap-1 min-w-0">
+                        <span id="hud-player-name" class="text-yellow-300 truncate max-w-[68px] sm:max-w-[100px]">BloxHunter</span>
+                        <span id="hud-stance-badge" class="hidden sm:inline-block bg-slate-800 text-slate-300 text-[9px] px-1.5 py-0.5 rounded font-bold">BERDIRI</span>
                     </div>
-                    <span id="hud-hp-text">100 / 100 HP</span>
+                    <span id="hud-hp-text" class="shrink-0">100 HP</span>
                 </div>
-                <div class="w-full h-3.5 bg-slate-800 rounded-full overflow-hidden border border-slate-600">
+                <div class="w-full h-2.5 sm:h-3.5 bg-slate-800 rounded-full overflow-hidden border border-slate-600">
                     <div id="hud-hp-bar" class="h-full bg-gradient-to-r from-emerald-400 to-green-500 transition-all duration-150" style="width: 100%"></div>
                 </div>
-                <div id="hud-squad-list" class="mt-2 space-y-1 text-[11px] text-slate-300 max-h-24 overflow-y-auto pr-0.5"></div>
+                <div id="hud-squad-list" class="hidden sm:block mt-2 space-y-1 text-[11px] text-slate-300 max-h-24 overflow-y-auto pr-0.5"></div>
             </div>
 
             <!-- Center: 3-Minute Session Countdown & Wave Info -->
-            <div id="hud-timer-box" class="bg-slate-950/90 border-2 border-amber-400/70 rounded-2xl px-4 py-2 text-center backdrop-blur-md shadow-xl">
-                <div class="text-[9px] font-extrabold uppercase tracking-widest text-amber-300">SISA WAKTU SESI</div>
-                <div id="hud-timer" class="roblox-font text-2xl sm:text-3xl font-black text-white tracking-wider">03:00</div>
-                <div class="flex items-center justify-center gap-2 text-[11px] font-bold text-slate-300 mt-0.5">
-                    <span>WAVE <span id="hud-wave" class="text-yellow-300">1</span></span>
+            <div id="hud-timer-box" class="bg-slate-950/90 border-2 border-amber-400/70 rounded-xl sm:rounded-2xl px-2.5 sm:px-4 py-1 sm:py-2 text-center backdrop-blur-md shadow-xl">
+                <div class="hidden sm:block text-[9px] font-extrabold uppercase tracking-widest text-amber-300">SISA WAKTU SESI</div>
+                <div id="hud-timer" class="roblox-font text-lg sm:text-3xl font-black text-white tracking-wider leading-none sm:leading-normal">03:00</div>
+                <div class="flex items-center justify-center gap-1.5 text-[9px] sm:text-[11px] font-bold text-slate-300 mt-0.5">
+                    <span>W<span id="hud-wave" class="text-yellow-300">1</span></span>
                     <span>•</span>
-                    <span>MUSUH <span id="hud-enemies-left" class="text-rose-400">0</span></span>
+                    <span>👾<span id="hud-enemies-left" class="text-rose-400">0</span></span>
                 </div>
-                <div id="hud-arena-label" class="text-[10px] font-bold text-cyan-300">GURUN PASIR</div>
+                <div id="hud-arena-label" class="hidden sm:block text-[10px] font-bold text-cyan-300">GURUN PASIR</div>
             </div>
 
             <!-- Right: Kills, Deaths & Score -->
-            <div class="bg-slate-950/85 border-2 border-slate-700/90 rounded-2xl p-2.5 sm:p-3 text-right backdrop-blur-md">
-                <div class="flex items-center justify-end gap-1.5">
-                    <span class="text-[10px] font-bold text-slate-400 uppercase">SKOR</span>
+            <div class="bg-slate-950/85 border-2 border-slate-700/90 rounded-xl sm:rounded-2xl p-2 sm:p-3 text-right backdrop-blur-md">
+                <div class="flex items-center justify-end gap-1">
+                    <span class="hidden sm:inline text-[10px] font-bold text-slate-400 uppercase">SKOR</span>
                     <button id="btn-hud-fullscreen" type="button" class="pointer-events-auto bg-slate-800/90 active:bg-slate-700 border border-slate-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md cursor-pointer" title="Layar Penuh">
                         ⛶
                     </button>
-                    <button id="btn-mobile-exit" class="pointer-events-auto sm:hidden bg-rose-600/90 active:bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-md">
+                    <button id="btn-mobile-exit" class="pointer-events-auto bg-rose-600/90 active:bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-md">
                         ✕
                     </button>
                 </div>
-                <div id="hud-score" class="text-xl sm:text-2xl font-black text-yellow-300">0</div>
-                <div class="text-[11px] font-bold text-slate-300 mt-0.5">
-                    <span class="text-emerald-400">🔫 <span id="hud-kills">0</span></span>
-                    <span class="mx-1 text-slate-600">|</span>
-                    <span class="text-rose-400">💀 <span id="hud-deaths">0</span></span>
+                <div id="hud-score" class="text-base sm:text-2xl font-black text-yellow-300 leading-tight">0</div>
+                <div class="text-[10px] sm:text-[11px] font-bold text-slate-300">
+                    <span class="text-emerald-400">🔫<span id="hud-kills">0</span></span>
+                    <span class="mx-0.5 text-slate-600">|</span>
+                    <span class="text-rose-400">💀<span id="hud-deaths">0</span></span>
                 </div>
-                <div id="hud-room-badge" class="text-[10px] text-indigo-300 font-bold mt-0.5">SOLO</div>
+                <div id="hud-room-badge" class="hidden sm:block text-[10px] text-indigo-300 font-bold mt-0.5">SOLO</div>
             </div>
         </div>
 
@@ -427,7 +454,7 @@
             </div>
 
             <!-- Desktop Controls Hint & Ammo Box -->
-            <div class="hidden md:flex items-center gap-2 bg-slate-950/75 border border-slate-700 px-3 py-1.5 rounded-xl text-[11px] text-slate-300">
+            <div id="desktop-controls-hint" class="hidden md:flex items-center gap-2 bg-slate-950/75 border border-slate-700 px-3 py-1.5 rounded-xl text-[11px] text-slate-300">
                 <span>Klik layar untuk kunci kamera • <b class="text-sky-300">[C / Ctrl]</b> Nunduk • <b class="text-amber-300">[1] / [R]</b> Kuis Reload</span>
                 <button id="btn-exit-lobby" class="pointer-events-auto ml-2 bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1 rounded-lg font-bold cursor-pointer">
                     Keluar
@@ -435,7 +462,7 @@
             </div>
 
             <!-- Desktop Ammo Box (50 / 50) -->
-            <div class="hidden md:block bg-slate-950/90 border-2 border-slate-700 rounded-2xl px-4 py-2.5 text-right backdrop-blur-md ml-auto pointer-events-auto">
+            <div id="desktop-ammo-box" class="hidden md:block bg-slate-950/90 border-2 border-slate-700 rounded-2xl px-4 py-2.5 text-right backdrop-blur-md ml-auto pointer-events-auto">
                 <div class="text-[10px] font-bold text-slate-400 uppercase">BLOX BLASTER • EDU RELOAD</div>
                 <div class="flex items-baseline justify-end gap-1.5">
                     <span id="hud-ammo" class="text-2xl sm:text-3xl font-black text-emerald-400">50</span>
@@ -1944,9 +1971,12 @@
         const roomChannel = ('BroadcastChannel' in window) ? new BroadcastChannel('blox_zombie_room_v6') : null;
         const waitingRoomMembers = new Map();
 
-        // PeerJS Online WebRTC P2P Multiplayer (Works directly on Vercel across devices!)
-        const PEER_PREFIX = 'blox-zombie-arena-3d-v1-';
-        const RELAY_TOPIC_PREFIX = 'blox-zombie-arena-3d-room-v1-';
+        // Multi-Channel Realtime Transport:
+        // 1) MQTT over Secure WebSocket (wss://broker.emqx.io:8084/mqtt) -> Ultra-fast (<100ms), no rate-limit, works on Vercel across phones/laptops
+        // 2) PeerJS WebRTC P2P with auto-retry
+        // 3) BroadcastChannel / LocalStorage fallback
+        const PEER_PREFIX = 'blox-zombie-arena-3d-v2-';
+        const MQTT_TOPIC_PREFIX = 'blox-zombie-arena-3d/school/room/';
         const PEER_RTC_CONFIG = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -1955,13 +1985,18 @@
                 { urls: 'stun:global.stun.twilio.com:3478' }
             ]
         };
+        let mqttClient = null;
+        let mqttConnected = false;
+        let subscribedMqttTopic = '';
+        let mqttBrokerIndex = 0;
+        const MQTT_BROKERS = [
+            'wss://broker.emqx.io:8084/mqtt',
+            'wss://broker.hivemq.com:8884/mqtt'
+        ];
         let peerNode = null;
         const hostClientConns = new Map(); // For Admin/Host: peerId -> DataConnection
         let clientHostConn = null;          // For Joining Friend: DataConnection to Host
         let p2pReconnectTimer = null;
-        let relayPollTimer = null;
-        let lastRelayPollTs = Math.floor(Date.now() / 1000) - 5;
-        let activeRelayCode = '';
 
         function setCloudBadge(text, isOnline) {
             const b = document.getElementById('cloud-sync-badge');
@@ -1972,59 +2007,92 @@
                 : 'text-[9px] font-extrabold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40';
         }
 
-        function stopRelayPolling() {
-            clearInterval(relayPollTimer);
-            relayPollTimer = null;
-            activeRelayCode = '';
-        }
+        function initMqttRealtime(roomCode) {
+            const mqttLib = window.mqtt || (typeof mqtt !== 'undefined' ? mqtt : null);
+            if (!mqttLib || typeof mqttLib.connect !== 'function') {
+                setCloudBadge('⚠️ CDN BROKER GAGAL', false);
+                return;
+            }
+            const targetTopic = MQTT_TOPIC_PREFIX + roomCode.toUpperCase();
 
-        function publishRelayPacket(roomCode, packet) {
-            if (!roomCode) return;
-            const topic = RELAY_TOPIC_PREFIX + roomCode.toUpperCase();
-            fetch(`https://ntfy.sh/${encodeURIComponent(topic)}`, {
-                method: 'POST',
-                body: JSON.stringify(packet),
-                keepalive: true
-            }).catch(() => {});
-        }
-
-        function startRelayPolling(roomCode) {
-            stopRelayPolling();
-            if (!roomCode) return;
-            activeRelayCode = roomCode.toUpperCase();
-            const topic = RELAY_TOPIC_PREFIX + activeRelayCode;
-            lastRelayPollTs = Math.floor(Date.now() / 1000) - 3;
-
-            const pollOnce = async () => {
-                if (state.mode !== 'multi' || state.roomCode.toUpperCase() !== activeRelayCode) return;
+            if (!mqttClient) {
+                const brokerUrl = MQTT_BROKERS[mqttBrokerIndex % MQTT_BROKERS.length];
                 try {
-                    const url = `https://ntfy.sh/${encodeURIComponent(topic)}/json?since=${lastRelayPollTs}&poll=1`;
-                    const res = await fetch(url, { cache: 'no-store' });
-                    if (!res.ok) return;
-                    const rawText = await res.text();
-                    const lines = rawText.trim().split('\n').filter(Boolean);
-                    for (const line of lines) {
-                        let envelope = null;
-                        try { envelope = JSON.parse(line); } catch (e) { continue; }
-                        if (!envelope || envelope.event !== 'message' || !envelope.message) continue;
-                        if (typeof envelope.time === 'number' && envelope.time > lastRelayPollTs) {
-                            lastRelayPollTs = envelope.time;
-                        }
-                        let pkt = null;
-                        try { pkt = JSON.parse(envelope.message); } catch (e) { continue; }
-                        if (!pkt || pkt.peerId === myPeerId) continue;
-                        handleIncomingRoomMessage(pkt);
-                    }
-                } catch (e) {}
-            };
+                    mqttClient = mqttLib.connect(brokerUrl, {
+                        clientId: 'blox_' + myPeerId + '_' + Math.floor(Math.random() * 10000),
+                        clean: true,
+                        keepalive: 25,
+                        connectTimeout: 5000,
+                        reconnectPeriod: 2000
+                    });
 
-            pollOnce();
-            relayPollTimer = setInterval(pollOnce, 1400);
+                    mqttClient.on('connect', () => {
+                        mqttConnected = true;
+                        setCloudBadge('🟢 ONLINE REALTIME', true);
+                        if (subscribedMqttTopic) {
+                            mqttClient.subscribe(subscribedMqttTopic, { qos: 0 });
+                        }
+                        if (state.mode === 'multi') {
+                            broadcastRoomMessage({
+                                type: 'lobby_join',
+                                peerId: myPeerId,
+                                roomCode: state.roomCode,
+                                nickname: state.nickname,
+                                isHost: state.isRoomHost,
+                                arena: state.arena
+                            });
+                            if (state.isRoomHost) {
+                                broadcastLobbyRosterFromHost();
+                            }
+                        }
+                    });
+
+                    mqttClient.on('message', (topic, messageBuf) => {
+                        try {
+                            const pkt = JSON.parse(messageBuf.toString());
+                            if (!pkt || pkt.peerId === myPeerId) return;
+                            handleIncomingRoomMessage(pkt);
+                        } catch (e) {}
+                    });
+
+                    mqttClient.on('offline', () => {
+                        mqttConnected = false;
+                        setCloudBadge('⏳ RECONNECT...', false);
+                    });
+
+                    mqttClient.on('error', () => {
+                        mqttConnected = false;
+                        mqttBrokerIndex++;
+                        try { mqttClient.end(true); } catch (e) {}
+                        mqttClient = null;
+                        setTimeout(() => initMqttRealtime(state.roomCode), 1000);
+                    });
+                } catch (e) {
+                    mqttClient = null;
+                }
+            }
+
+            if (mqttClient && subscribedMqttTopic !== targetTopic) {
+                if (subscribedMqttTopic && mqttConnected) {
+                    try { mqttClient.unsubscribe(subscribedMqttTopic); } catch (e) {}
+                }
+                subscribedMqttTopic = targetTopic;
+                if (mqttConnected) {
+                    try { mqttClient.subscribe(subscribedMqttTopic, { qos: 0 }); } catch (e) {}
+                }
+            }
+        }
+
+        function publishMqttPacket(roomCode, packet, retain = false) {
+            if (!mqttClient || !mqttConnected || !roomCode) return;
+            try {
+                const topic = MQTT_TOPIC_PREFIX + roomCode.toUpperCase();
+                mqttClient.publish(topic, JSON.stringify(packet), { qos: 0, retain });
+            } catch (e) {}
         }
 
         function cleanupPeerNode() {
             clearTimeout(p2pReconnectTimer);
-            stopRelayPolling();
             hostClientConns.forEach(c => { try { c.close(); } catch (e) {} });
             hostClientConns.clear();
             if (clientHostConn) {
@@ -2060,16 +2128,13 @@
                 members: membersArr
             };
             sendP2PPacket(pkt);
-            publishRelayPacket(state.roomCode, pkt);
+            publishMqttPacket(state.roomCode, pkt, true);
         }
 
         function setupOnlinePeerRoom(code, asHost) {
             cleanupPeerNode();
-            startRelayPolling(code);
-            setCloudBadge('🌐 ONLINE RELAY', true);
+            initMqttRealtime(code);
 
-            // Canvas/iframe sandboxes block external WebSocket (wss://) connections with a SecurityError.
-            // Skip PeerJS WebSocket setup inside sandboxed iframes and use the HTTPS relay + cloud sync seamlessly.
             const isSandboxedFrame = (() => {
                 try {
                     return window.self !== window.top || window.location.protocol === 'about:' || window.location.protocol === 'blob:';
@@ -2084,17 +2149,16 @@
 
             try {
                 if (asHost) {
-                    // Admin claims deterministic Peer ID based on Room Code (e.g., blox-zombie-arena-3d-v1-ZMB189)
                     const hostPeerId = PEER_PREFIX + code.toUpperCase();
                     peerNode = new Peer(hostPeerId, { debug: 0, config: PEER_RTC_CONFIG });
 
                     peerNode.on('open', () => {
-                        setCloudBadge('🌐 ONLINE P2P', true);
+                        setCloudBadge('🌐 ONLINE REALTIME', true);
                     });
 
                     peerNode.on('connection', (conn) => {
                         conn.on('open', () => {
-                            setCloudBadge('🌐 ONLINE P2P', true);
+                            setCloudBadge('🌐 ONLINE REALTIME', true);
                             conn.send({
                                 type: 'lobby_roster',
                                 peerId: myPeerId,
@@ -2142,15 +2206,13 @@
                             waitingRoomMembers.clear();
                             syncSelfInWaitingRoom();
                             setupOnlinePeerRoom(state.roomCode, true);
-                        } else {
-                            setCloudBadge('🌐 ONLINE RELAY', true);
                         }
                     });
                 } else {
-                    // Friend connects directly to Host's Room Code Peer ID + Relay channel
                     peerNode = new Peer({ debug: 0, config: PEER_RTC_CONFIG });
 
-                    peerNode.on('open', () => {
+                    const connectToHostWithRetry = (attempt = 0) => {
+                        if (!peerNode || peerNode.destroyed || state.isRoomHost || state.roomCode.toUpperCase() !== code.toUpperCase()) return;
                         try {
                             const targetHostId = PEER_PREFIX + code.toUpperCase();
                             const conn = peerNode.connect(targetHostId, { reliable: true });
@@ -2165,7 +2227,6 @@
                                     nickname: state.nickname,
                                     isHost: false
                                 });
-                                showToast(`✅ Berhasil terhubung ke Room ${state.roomCode}!`);
                             });
 
                             conn.on('data', (data) => {
@@ -2174,20 +2235,17 @@
                             });
 
                             conn.on('close', () => {
-                                setCloudBadge('🌐 ONLINE RELAY', true);
+                                if (attempt < 5) {
+                                    p2pReconnectTimer = setTimeout(() => connectToHostWithRetry(attempt + 1), 1800);
+                                }
                             });
-                        } catch (e) {
-                            setCloudBadge('🌐 ONLINE RELAY', true);
-                        }
-                    });
+                        } catch (e) {}
+                    };
 
-                    peerNode.on('error', () => {
-                        setCloudBadge('🌐 ONLINE RELAY', true);
-                    });
+                    peerNode.on('open', () => connectToHostWithRetry(0));
                 }
             } catch (err) {
                 peerNode = null;
-                setCloudBadge('🌐 ONLINE RELAY', true);
             }
         }
 
@@ -2453,7 +2511,7 @@
             const packet = { ...payload, ts: Date.now() };
             sendP2PPacket(packet);
             if (state.mode === 'multi') {
-                publishRelayPacket(state.roomCode, packet);
+                publishMqttPacket(state.roomCode, packet, payload.type === 'host_start');
             }
             if (roomChannel) roomChannel.postMessage(packet);
             try {
@@ -3653,20 +3711,33 @@
         document.getElementById('btn-copy-code').addEventListener('click', () => {
             const code = state.roomCode;
             if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(code).then(() => showToast(`Kode Room ${code} disalin!`)).catch(() => copyTextFallback(code));
+                navigator.clipboard.writeText(code).then(() => showToast(`Kode Room ${code} disalin!`)).catch(() => copyTextFallback(code, `Kode Room ${code} disalin!`));
             } else {
-                copyTextFallback(code);
+                copyTextFallback(code, `Kode Room ${code} disalin!`);
             }
         });
 
-        function copyTextFallback(text) {
+        document.getElementById('btn-copy-link').addEventListener('click', () => {
+            const url = new URL(window.location.href);
+            url.searchParams.set('room', state.roomCode);
+            const inviteUrl = url.toString();
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(inviteUrl)
+                    .then(() => showToast(`🔗 Link Undangan Room ${state.roomCode} disalin! Kirim ke teman.`))
+                    .catch(() => copyTextFallback(inviteUrl, `🔗 Link Undangan Room ${state.roomCode} disalin!`));
+            } else {
+                copyTextFallback(inviteUrl, `🔗 Link Undangan Room ${state.roomCode} disalin!`);
+            }
+        });
+
+        function copyTextFallback(text, msg = 'Disalin!') {
             const ta = document.createElement('textarea');
             ta.value = text;
             document.body.appendChild(ta);
             ta.select();
             document.execCommand('copy');
             document.body.removeChild(ta);
-            showToast(`Kode Room ${text} disalin!`);
+            showToast(msg);
         }
 
         document.getElementById('btn-new-room').addEventListener('click', () => {
@@ -3680,8 +3751,8 @@
             showToast(`Room online baru ${state.roomCode} dibuat! Kamu adalah Admin.`);
         });
 
-        document.getElementById('btn-join-room').addEventListener('click', () => {
-            const val = document.getElementById('input-join-code').value.trim().toUpperCase();
+        function joinRoomByCode(rawCode) {
+            const val = String(rawCode || '').trim().toUpperCase();
             if (val.length < 4) {
                 showToast('Masukkan kode room minimal 4 karakter!');
                 return;
@@ -3690,10 +3761,17 @@
                 showToast(`Kamu sudah berada di room ${val} sebagai Admin!`);
                 return;
             }
+            state.mode = 'multi';
+            document.getElementById('btn-mode-multi').className = 'roblox-btn bg-indigo-600 border-2 border-indigo-300 text-white font-bold py-2.5 px-3 rounded-xl text-xs sm:text-sm cursor-pointer';
+            document.getElementById('btn-mode-solo').className = 'roblox-btn bg-slate-700 border-2 border-slate-500 text-slate-200 font-bold py-2.5 px-3 rounded-xl text-xs sm:text-sm cursor-pointer';
+            document.getElementById('panel-multi').classList.remove('hidden');
+            document.getElementById('panel-solo').classList.add('hidden');
+
             state.roomCode = val;
             state.isRoomHost = false;
             waitingRoomMembers.clear();
             document.getElementById('lobby-room-code').textContent = state.roomCode;
+            document.getElementById('input-join-code').value = state.roomCode;
             syncSelfInWaitingRoom();
             setupOnlinePeerRoom(state.roomCode, false);
             subscribeToCloudRoom(state.roomCode, false);
@@ -3705,6 +3783,10 @@
                 isHost: false
             });
             showToast(`Menghubungkan ke Room ${state.roomCode}...`);
+        }
+
+        document.getElementById('btn-join-room').addEventListener('click', () => {
+            joinRoomByCode(document.getElementById('input-join-code').value);
         });
 
         document.getElementById('player-name-input').addEventListener('input', (e) => {
@@ -3831,6 +3913,16 @@
             buildArena('desert');
             syncSelfInWaitingRoom();
             initCloudMultiplayer();
+
+            // Auto-join room if opened via ?room=ZMB123 invite link!
+            const urlParams = new URLSearchParams(window.location.search);
+            const invitedRoom = urlParams.get('room');
+            if (invitedRoom && invitedRoom.trim().length >= 4) {
+                joinRoomByCode(invitedRoom);
+            } else {
+                initMqttRealtime(state.roomCode);
+            }
+
             animate();
         };
     </script>
